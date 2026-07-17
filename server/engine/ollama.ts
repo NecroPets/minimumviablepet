@@ -221,6 +221,7 @@ export class OllamaClient {
         model,
         messages: opts.messages,
         stream: false,
+        think: false,
         keep_alive: opts.keepAlive ?? config.keepAliveChat,
         options: { temperature: opts.temperature ?? 0.4 },
       }),
@@ -269,8 +270,14 @@ export class OllamaClient {
       body: JSON.stringify({
         model,
         stream: false,
+        // think:false — a thinking-capable vision model would spend the
+        // token budget reasoning and return empty content. num_ctx pinned:
+        // on a shared daemon, omitting it routes to whatever instance a
+        // resident agent last configured (a 262k-context runner dies on
+        // image inputs); an explicit modest context gets a right-sized one.
+        think: false,
         keep_alive: config.keepAliveVision,
-        options: { temperature: 0.2, num_predict: 400 },
+        options: { temperature: 0.2, num_predict: 400, num_ctx: 8192 },
         messages: [{ role: "user", content: prompt, images: [imageBase64] }],
       }),
       signal: AbortSignal.timeout(this.firstResponseBudget(model)),

@@ -149,6 +149,11 @@ async function buildResponse(opts: Parameters<typeof streamChat>[0]): Promise<Re
         acc += n.value;
         send(sseFrame("delta", { text: n.value }));
       }
+      if (acc.trim() === "") {
+        // a zero-content stream (model mid-load, thinking-only output) must
+        // surface as a retryable error, never as a silent nothing
+        throw new Error("the model streamed no reply — it may still be loading; try again");
+      }
       const assistantId = persistAssistant({ eval_count: stats.evalCount, duration_ms: stats.durationMs });
       let extra: Record<string, unknown> | undefined;
       if (opts.postTurn) {

@@ -203,20 +203,35 @@ def ollama_embed_up():
         return False
 
 
+def gate_png_b64(size=64):
+    """A valid solid-red PNG, built byte-by-byte (zlib-correct)."""
+    import base64
+    import struct
+    import zlib
+
+    def chunk(tag, data):
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+
+    ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+    row = b"\x00" + b"\xff\x00\x00" * size
+    idat = chunk(b"IDAT", zlib.compress(row * size))
+    png = b"\x89PNG\r\n\x1a\n" + ihdr + idat + chunk(b"IEND", b"")
+    return base64.b64encode(png).decode()
+
+
 @pytest.fixture(scope="session")
 def ollama_vision_up():
     """True when the vision model answers over a real (tiny) image."""
-    # a VALID 1x1 red PNG (generated, checksum-correct — ollama rejects
-    # malformed images at request level, which would silently fail the gate)
-    onepx = (
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
-    )
+    # a generated 64x64 red PNG. Size matters twice over: a malformed image
+    # is rejected at request level (gate silently false), and a 1x1 CRASHES
+    # qwen3-vl's patch preprocessor, killing the shared runner for everyone.
     payload = json.dumps(
         {
             "model": os.environ.get("MVP_VISION_MODEL", "qwen3-vl:8b"),
-            "messages": [{"role": "user", "content": "one word: what color?", "images": [onepx]}],
+            "messages": [{"role": "user", "content": "one word: what color?", "images": [gate_png_b64()]}],
             "stream": False,
-            "options": {"num_predict": 3},
+            "think": False,
+            "options": {"num_predict": 8, "num_ctx": 8192},
         }
     ).encode()
     req = urllib.request.Request(

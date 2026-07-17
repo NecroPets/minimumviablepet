@@ -38,25 +38,32 @@ export async function retrieve(
   companionId: string,
   message: string,
 ): Promise<RetrievalResult> {
+  // model filter is load-bearing: after MVP_EMBED_MODEL changes, stale
+  // vectors live in a different space — they are invisible here and healed
+  // by the next train (which re-embeds model-mismatched chunks)
   const rows = db
-    .query<ChunkRow, [string]>(
+    .query<ChunkRow, [string, string]>(
       `SELECT id, source, source_key, text, embedding, created_at
-       FROM chunks WHERE companion_id = ? AND embedding IS NOT NULL`,
+       FROM chunks WHERE companion_id = ? AND embedding IS NOT NULL AND model = ?`,
     )
-    .all(companionId);
+    .all(companionId, config.embedModel);
   if (rows.length === 0) return { chunks: [], usedTokens: 0 };
 
   const [queryVec] = await embedTexts(db, [message]);
 
-  // keyword leg: bm25 rank (lower = better), normalized within the hit set
+  // keyword leg: bm25 rank (lower = better), normalized within the hit set,
+  // scoped to THIS companion — a shared FTS index must not let one
+  // companion's chunks starve another's keyword scores
   const keywordScore = new Map<number, number>();
   const match = ftsQuery(message);
   if (match !== "") {
     const hits = db
-      .query<{ rowid: number; rank: number }, [string]>(
-        "SELECT rowid, bm25(chunks_fts) AS rank FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY rank LIMIT 50",
+      .query<{ rowid: number; rank: number }, [string, string]>(
+        `SELECT rowid, bm25(chunks_fts) AS rank FROM chunks_fts
+         WHERE chunks_fts MATCH ? AND rowid IN (SELECT id FROM chunks WHERE companion_id = ?)
+         ORDER BY rank LIMIT 50`,
       )
-      .all(match);
+      .all(match, companionId);
     if (hits.length > 0) {
       const ranks = hits.map((h) => h.rank);
       const best = Math.min(...ranks);
@@ -71,6 +78,12 @@ export async function retrieve(
   const scored = rows
     .map((row) => {
       const vec = blobToVec(row.embedding);
+      if (vec.length !== queryVec.length) {
+        throw new Error(
+          `chunk ${row.id} has a ${vec.length}-dim embedding but the query embedded to ${queryVec.length} dims — ` +
+            `MVP_EMBED_DIMS/model mismatch; run train to re-embed`,
+        );
+      }
       let dot = 0;
       for (let i = 0; i < vec.length; i++) dot += vec[i] * queryVec[i];
       const cos = Math.max(0, dot); // both sides L2-normalized at write time

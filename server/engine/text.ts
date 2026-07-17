@@ -30,9 +30,11 @@ export function estimateTokens(text: string): number {
 }
 
 /** Turn a free-text user message into a safe FTS5 MATCH expression.
- * Returns "" when nothing queryable remains (caller skips the keyword leg). */
+ * Apostrophes split (the unicode61 tokenizer treats them as separators, so a
+ * quoted "kernel's" would compile to a strict two-token phrase that never
+ * matches). Returns "" when nothing queryable remains. */
 export function ftsQuery(message: string): string {
-  const tokens = message.toLowerCase().match(/[a-z0-9']{3,}/g) ?? [];
+  const tokens = message.toLowerCase().replace(/'/g, " ").match(/[a-z0-9]{3,}/g) ?? [];
   const unique = [...new Set(tokens)].slice(0, 24);
   return unique.map((t) => `"${t}"`).join(" OR ");
 }

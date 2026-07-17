@@ -110,6 +110,21 @@ describe("diffRebuildChunks", () => {
     diffRebuildChunks(db, "c1", []);
     expect(db.query<{ n: number }, []>("SELECT COUNT(*) n FROM chunks").get()!.n).toBe(1);
   });
+
+  test("REGRESSION: text-artifact chunks (source='story', artifact-owned) survive training", () => {
+    const db = setup();
+    db.run(
+      "INSERT INTO artifacts (id, companion_id, kind, original_name, stored_path, mime, bytes, hash, status) VALUES ('a1','c1','text','story.md','p','t/m',1,'h1','processed')",
+    );
+    db.run(
+      "INSERT INTO chunks (companion_id, source, source_key, artifact_id, seq, text, hash) VALUES ('c1', 'story', 'artifact:a1', 'a1', 0, 'an uploaded story that must not be deleted by training', 'ha')",
+    );
+    diffRebuildChunks(db, "c1", desiredProfileChunks(richProfile()));
+    const survivor = db
+      .query<{ n: number }, []>("SELECT COUNT(*) n FROM chunks WHERE artifact_id = 'a1'")
+      .get()!.n;
+    expect(survivor).toBe(1);
+  });
 });
 
 describe("trainPreflight", () => {
@@ -169,6 +184,65 @@ describe("trainCompanion", () => {
     const again = await trainCompanion(db, "c1", NO_COUNTS, () => {}, client);
     expect(again.chunks_embedded).toBe(0);
     expect(again.chunks_cached).toBe(again.chunks_total);
+  });
+
+  test("REGRESSION: a profile write landing mid-train survives the final update", async () => {
+    const profile = richProfile();
+    profile.pet.color = ""; // forces a consensus call (photo evidence present)
+    profile.photos_analyzed = [
+      { file: "a.jpg", hash8: "aaaaaaaa", captured_at: null, summary: "s", physical: ["gray coat"] },
+    ];
+    const db = setup(profile);
+
+    // fake Ollama whose consensus call simulates the interview writing the
+    // profile WHILE train holds its in-memory snapshot
+    const server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        const path = new URL(req.url).pathname;
+        if (path === "/api/embed") {
+          const { input } = (await req.json()) as { input: string[] };
+          return Response.json({
+            embeddings: input.map(() => {
+              const v = new Array(config.embedDims).fill(0);
+              v[0] = 1;
+              return v;
+            }),
+          });
+        }
+        const concurrent = parseProfile(
+          db.query<{ profile_json: string }, []>("SELECT profile_json FROM companions").get()!.profile_json,
+        );
+        concurrent.personality.obsessions = ["birds through the window"];
+        db.run("UPDATE companions SET profile_json = ? WHERE id = 'c1'", [JSON.stringify(concurrent)]);
+        return Response.json({ message: { content: JSON.stringify({ color: "gray" }) } });
+      },
+    });
+    fixtures.push(server);
+    const client = new OllamaClient(`http://127.0.0.1:${server.port}`, {
+      chat: "fake", vision: "fake", embed: config.embedModel,
+    });
+
+    await trainCompanion(db, "c1", NO_COUNTS, () => {}, client);
+    const saved = parseProfile(
+      db.query<{ profile_json: string }, []>("SELECT profile_json FROM companions").get()!.profile_json,
+    );
+    expect(saved.personality.obsessions).toEqual(["birds through the window"]); // concurrent owner write survives
+    expect(saved.pet.color).toBe("gray"); // consensus fill still lands
+  });
+
+  test("REGRESSION: stale-model chunks are re-embedded by train", async () => {
+    const db = setup();
+    db.run(
+      "INSERT INTO chunks (companion_id, source, source_key, seq, text, hash, model, embedding) VALUES ('c1', 'chat', 'chat:1', 0, 'an old memory embedded by a previous model', 'ho', 'old-model', X'00000000')",
+    );
+    const result = await trainCompanion(db, "c1", NO_COUNTS, () => {}, fakeOllama());
+    const row = db
+      .query<{ model: string; len: number }, []>("SELECT model, length(embedding) len FROM chunks WHERE source_key = 'chat:1'")
+      .get()!;
+    expect(row.model).toBe(config.embedModel);
+    expect(row.len).toBe(config.embedDims * 4);
+    expect(result.chunks_embedded).toBeGreaterThanOrEqual(1);
   });
 
   test("consensus fills empty fields from photo evidence but never overwrites", async () => {

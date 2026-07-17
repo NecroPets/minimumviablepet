@@ -69,8 +69,8 @@ describe("ftsQuery", () => {
   test("emoji-only input yields empty query", () => {
     expect(ftsQuery("🐱🐾✨")).toBe("");
   });
-  test("apostrophes survive inside quoted tokens", () => {
-    expect(ftsQuery("kernel's blanket")).toBe(`"kernel's" OR "blanket"`);
+  test("possessives split on the apostrophe (quoted apostrophes would compile to never-matching phrases)", () => {
+    expect(ftsQuery("kernel's blanket")).toBe(`"kernel" OR "blanket"`);
   });
   test("caps at 24 unique tokens", () => {
     const many = Array.from({ length: 40 }, (_, i) => `word${i}xx`).join(" ");

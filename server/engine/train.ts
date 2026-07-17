@@ -141,11 +141,13 @@ export function desiredProfileChunks(profile: PetProfile): DesiredChunk[] {
 }
 
 /** Rebuild profile-derived chunks by (source_key, seq, hash) diff — artifact
- * and fact chunks are owned elsewhere and untouched. Returns insert count. */
+ * and fact chunks are owned elsewhere and untouched. The artifact_id IS NULL
+ * predicate is load-bearing: text-artifact chunks share source='story' and
+ * must never be treated as stale profile chunks. Returns insert count. */
 export function diffRebuildChunks(db: Database, companionId: string, desired: DesiredChunk[]): number {
   const existing = db
     .query<{ id: number; source_key: string; seq: number; hash: string }, [string]>(
-      "SELECT id, source_key, seq, hash FROM chunks WHERE companion_id = ? AND source IN ('story','profile')",
+      "SELECT id, source_key, seq, hash FROM chunks WHERE companion_id = ? AND source IN ('story','profile') AND artifact_id IS NULL",
     )
     .all(companionId);
   const desiredByKey = new Map(desired.map((d) => [`${d.source_key}#${d.seq}`, d]));
@@ -226,11 +228,14 @@ export async function trainCompanion(
   const desired = desiredProfileChunks(profile);
   const inserted = diffRebuildChunks(db, companionId, desired);
 
+  // pick up vectorless chunks AND chunks embedded by a different model —
+  // retrieval filters on the current model, so retraining is the documented
+  // recovery path after switching MVP_EMBED_MODEL
   const pendingRows = db
-    .query<{ id: number; text: string }, [string]>(
-      "SELECT id, text FROM chunks WHERE companion_id = ? AND embedding IS NULL",
+    .query<{ id: number; text: string }, [string, string]>(
+      "SELECT id, text FROM chunks WHERE companion_id = ? AND (embedding IS NULL OR model IS NOT ?)",
     )
-    .all(companionId);
+    .all(companionId, config.embedModel);
   emit("step", { name: "embedding" });
   const update = db.prepare(
     `UPDATE chunks SET embedding = ?, model = ?, embedded_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`,
@@ -246,15 +251,26 @@ export async function trainCompanion(
   }
 
   emit("step", { name: "compile" });
-  const snapshot = compilePersonaPrompt(profile, "", "{date line — recomputed for every message}");
-  const progress = readiness(profile, counts);
+  // Re-read inside the write transaction: the interview or an ingest
+  // processor may have written the profile while consensus/embedding ran.
+  // The DB copy (the owner's words) wins; train's consensus fills land
+  // only where still empty.
+  let finalProfile = profile;
   db.transaction(() => {
+    const current = parseProfile(
+      db.query<{ profile_json: string }, [string]>("SELECT profile_json FROM companions WHERE id = ?")
+        .get(companionId)!.profile_json,
+    );
+    if (current.pet.name.trim() === "") current.pet.name = row.name;
+    finalProfile = mergeProfile(current, profile);
+    const snapshot = compilePersonaPrompt(finalProfile, "", "{date line — recomputed for every message}");
     db.run(
       `UPDATE companions SET profile_json = ?, profile_version = profile_version + 1,
        persona_prompt = ?, state = 'awake', trained_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`,
-      [JSON.stringify(profile), snapshot, companionId],
+      [JSON.stringify(finalProfile), snapshot, companionId],
     );
   })();
+  const progress = readiness(finalProfile, counts);
 
   const total = db
     .query<{ n: number }, [string]>("SELECT COUNT(*) n FROM chunks WHERE companion_id = ?")

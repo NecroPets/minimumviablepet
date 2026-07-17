@@ -1,12 +1,19 @@
 export interface RunOptions {
   timeoutMs?: number;
   cwd?: string;
+  /** grace after SIGTERM before SIGKILL (tests shrink this) */
+  killGraceMs?: number;
+  /** grace after exit for output pipes to close before giving up on them */
+  pipeDrainMs?: number;
 }
 
 /** Run an external binary, capture stdout, and fail loudly:
  * - missing binary -> error naming the command
  * - non-zero exit -> error with the stderr tail
- * - timeout -> process killed, error names the elapsed budget */
+ * - timeout -> SIGTERM, then SIGKILL after a grace — termination is
+ *   guaranteed even for children that ignore SIGTERM (a hung whisper must
+ *   never wedge the serial ingest queue)
+ * - pipes held open past exit (grandchildren) -> bounded wait, loud error */
 export async function run(cmd: string[], opts: RunOptions = {}): Promise<string> {
   let proc: ReturnType<typeof Bun.spawn>;
   try {
@@ -16,26 +23,43 @@ export async function run(cmd: string[], opts: RunOptions = {}): Promise<string>
   }
 
   let timedOut = false;
-  const timer = opts.timeoutMs
-    ? setTimeout(() => {
-        timedOut = true;
-        proc.kill();
-      }, opts.timeoutMs)
-    : undefined;
+  let termTimer: ReturnType<typeof setTimeout> | undefined;
+  let killTimer: ReturnType<typeof setTimeout> | undefined;
+  if (opts.timeoutMs) {
+    termTimer = setTimeout(() => {
+      timedOut = true;
+      proc.kill();
+      killTimer = setTimeout(() => proc.kill(9), opts.killGraceMs ?? 5000);
+    }, opts.timeoutMs);
+  }
 
-  const [stdout, stderr, exitCode] = await Promise.all([
+  const collected = Promise.all([
     new Response(proc.stdout as ReadableStream).text(),
     new Response(proc.stderr as ReadableStream).text(),
     proc.exited,
-  ]);
-  if (timer) clearTimeout(timer);
+  ]).then(([stdout, stderr, exitCode]) => ({ done: true as const, stdout, stderr, exitCode }));
+
+  const exitedButPipesStuck = (async () => {
+    const exitCode = await proc.exited;
+    await new Promise((r) => setTimeout(r, opts.pipeDrainMs ?? 2000));
+    return { done: false as const, exitCode };
+  })();
+
+  const outcome = await Promise.race([collected, exitedButPipesStuck]);
+  clearTimeout(termTimer);
+  clearTimeout(killTimer);
 
   if (timedOut) {
     throw new Error(`${cmd[0]} timed out after ${Math.round((opts.timeoutMs as number) / 1000)}s and was killed`);
   }
-  if (exitCode !== 0) {
-    const tail = stderr.trim().slice(-500);
-    throw new Error(`${cmd[0]} exited ${exitCode}: ${tail || "(no stderr)"}`);
+  if (!outcome.done) {
+    throw new Error(
+      `${cmd[0]} exited ${outcome.exitCode} but its output pipes never closed — a grandchild process may be holding them`,
+    );
   }
-  return stdout;
+  if (outcome.exitCode !== 0) {
+    const tail = outcome.stderr.trim().slice(-500);
+    throw new Error(`${cmd[0]} exited ${outcome.exitCode}: ${tail || "(no stderr)"}`);
+  }
+  return outcome.stdout;
 }

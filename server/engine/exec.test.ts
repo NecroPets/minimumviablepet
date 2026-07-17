@@ -21,4 +21,22 @@ describe("run", () => {
     await expect(run(["sleep", "5"], { timeoutMs: 200 })).rejects.toThrow(/timed out/);
     expect(Date.now() - started).toBeLessThan(2000);
   });
+
+  test("a SIGTERM-immune child is SIGKILLed — termination is guaranteed", async () => {
+    const started = Date.now();
+    await expect(
+      run(["sh", "-c", 'trap "" TERM; sleep 30'], { timeoutMs: 300, killGraceMs: 400 }),
+    ).rejects.toThrow(/timed out/);
+    expect(Date.now() - started).toBeLessThan(5000);
+  });
+
+  test("pipes held past exit by a grandchild fail loudly instead of hanging", async () => {
+    const started = Date.now();
+    // parent exits 0 immediately; the backgrounded child inherits stdout and
+    // keeps it open well past the drain grace
+    await expect(
+      run(["sh", "-c", "sleep 8 & exit 0"], { pipeDrainMs: 400 }),
+    ).rejects.toThrow(/pipes never closed/);
+    expect(Date.now() - started).toBeLessThan(4000);
+  });
 });

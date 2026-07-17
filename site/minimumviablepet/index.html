@@ -1610,14 +1610,18 @@ html.js .mvp-reveal.is-in { opacity: 1; transform: none; }
 (function () {
   "use strict";
 
-  /* --- Local visitors get a door into the actual app --- */
+  /* --- Local visitors get a door into the actual app — but only when the
+     engine is really mounted (a landing-only build served on loopback must
+     not advertise a 404). Progressive enhancement; failures change nothing. --- */
   var appLink = document.querySelector("[data-app-link]");
   if (!appLink) return;
-  if (["localhost", "127.0.0.1", "[::1]"].includes(location.hostname)) {
+  if (!["localhost", "127.0.0.1", "[::1]"].includes(location.hostname)) return;
+  fetch("/api/app/health").then(function (res) {
+    if (res.status !== 200 && res.status !== 503) return; // 404 = no engine here
     appLink.href = "/app/";
     appLink.removeAttribute("rel");
     appLink.textContent = "Open the app →";
-  }
+  }).catch(function () {});
 })();
 
 (function () {

@@ -45,16 +45,27 @@ export const processImage: Processor = async (ctx) => {
   const capturedAt = await mdlsCapturedAt(artifact.stored_path);
   setCapturedAt(db, artifact, capturedAt);
 
-  // one sips call handles HEIC/PNG/WebP/GIF -> downscaled JPEG for the model
+  // one sips call handles HEIC/PNG/WebP/GIF -> downscaled JPEG for the model;
+  // on Linux (no sips) ffmpeg covers everything but HEIC
   const visionJpeg = join(tmpDir, "vision.jpg");
-  await run([
-    "sips",
-    "--resampleHeightWidthMax", "1024",
-    "-s", "format", "jpeg",
-    "-s", "formatOptions", "85",
-    artifact.stored_path,
-    "--out", visionJpeg,
-  ]);
+  try {
+    await run([
+      "sips",
+      "--resampleHeightWidthMax", "1024",
+      "-s", "format", "jpeg",
+      "-s", "formatOptions", "85",
+      artifact.stored_path,
+      "--out", visionJpeg,
+    ]);
+  } catch (err) {
+    // a real sips failure (corrupt image) stays loud; only a MISSING sips
+    // falls through to the portable path
+    if (!(err as Error).message.includes("could not be started")) throw err;
+    await run([
+      "ffmpeg", "-v", "error", "-y", "-i", artifact.stored_path,
+      "-vf", "scale='min(1024,iw)':-2", "-frames:v", "1", "-q:v", "4", visionJpeg,
+    ]);
+  }
 
   ctx.emit("captioning");
   const b64 = Buffer.from(await Bun.file(visionJpeg).arrayBuffer()).toString("base64");

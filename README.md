@@ -31,11 +31,20 @@ Optional, per file type — skip any of these and that file type is skipped, lou
 with the install command in the error:
 
 ```sh
+# macOS
 brew install ffmpeg                 # videos + voice memos
-uv tool install mlx-whisper         # speech-to-text (Apple Silicon; alternative below)
-brew install whisper-cpp            # then set MVP_WHISPER_BIN=whisper-cli
+uv tool install mlx-whisper         # speech-to-text (Apple Silicon; alternatives below)
+brew install whisper-cpp            # then MVP_WHISPER_BIN=whisper-cli + a ggml model file
 brew install poppler                # vet PDFs (pdftotext)
+
+# Linux
+sudo apt install ffmpeg poppler-utils
+pip install openai-whisper          # then MVP_WHISPER_BIN=whisper MVP_WHISPER_MODEL=medium
 ```
+
+(Photos normalize via macOS `sips` where available and fall back to ffmpeg
+elsewhere — HEIC needs macOS. Capture-date metadata comes from `mdls` and is
+macOS-only; photos elsewhere ingest without timeline dates.)
 
 **Hardware honesty:** 16 GB RAM works with an 8B-class chat model
 (`MVP_CHAT_MODEL=qwen3:8b`). The defaults are what this was built and tested on
@@ -83,6 +92,22 @@ Convenience: `bun link` puts `mvp` on your PATH.
 Everything is in [.env.example](.env.example) — models, ports, data directory,
 whisper binary, upload caps, memory tuning. Bun loads `.env` automatically.
 Your companions live in `~/.mvp/` by default, deliberately outside the repo.
+
+## Deploying the landing pages (and only those)
+
+The Dockerfile bakes `MVP_PUBLIC=1`: landing pages + waitlist only, engine
+never imported, no companion data possible. **The waitlist DB is ephemeral on
+platforms like Railway** — attach a volume and point `WAITLIST_DB` at it
+(e.g. mount `/data`, set `WAITLIST_DB=/data/waitlist.db`) or every
+redeploy silently discards your signups.
+
+## Scale honesty
+
+Memory retrieval is a brute-force cosine scan over the companion's chunk
+vectors — deliberately simple, zero extensions, and instant at personal scale
+(hundreds to a few thousand memories). At tens of thousands of chunks it
+materializes tens of MB per message; if someone ever gets there, that is the
+moment for a vector index, not before.
 
 ## Privacy & security posture
 

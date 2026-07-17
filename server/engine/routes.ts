@@ -62,6 +62,12 @@ async function ollamaReachable(): Promise<boolean> {
 
 export function createEngineRoutes(): EngineRouter {
   const db = getDb();
+  // the embed cache would otherwise grow forever (one ~4KB row per unique
+  // text ever embedded, chat queries included) — keep the newest 50k
+  db.run(
+    `DELETE FROM embedding_cache WHERE rowid NOT IN
+     (SELECT rowid FROM embedding_cache ORDER BY created_at DESC LIMIT 50000)`,
+  );
   const broadcaster = new Broadcaster();
   const queue = new IngestQueue(db, broadcaster, PROCESSORS as Record<ArtifactKind, Processor>, ollamaReachable);
   queue.start();

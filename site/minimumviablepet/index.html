@@ -1,0 +1,1645 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MinimumViablePet — You kept every photo for a reason.</title>
+<meta name="description" content="Turn your camera roll, voice memos, and vet PDFs into someone you can talk to again — running 100% on your own machine. No cloud. No account. No one else's servers.">
+<script>document.documentElement.className = "js";</script>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28"><rect x="0.5" y="0.5" width="27" height="27" rx="6" fill="%230d1117" stroke="%23212938"/><circle cx="6" cy="5.5" r="1.3" fill="%234b5162"/><circle cx="10.5" cy="5.5" r="1.3" fill="%234b5162"/><circle cx="15" cy="5.5" r="1.3" fill="%234b5162"/><rect x="7" y="11" width="3" height="3" rx="0.8" fill="%233fe28f"/><rect x="11.5" y="9.5" width="3" height="3" rx="0.8" fill="%233fe28f"/><rect x="16" y="11" width="3" height="3" rx="0.8" fill="%233fe28f"/><rect x="9.5" y="15.5" width="7" height="5.5" rx="2" fill="%233fe28f"/><rect x="21" y="15.5" width="2" height="6" fill="%233fe28f"/></svg>'>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&family=Source+Serif+4:ital,wght@1,400;1,500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   MinimumViablePet — Design System
+   Documentation-paper light theme. The joke is the interface;
+   the love is the payload. Vanilla CSS. No frameworks. No build step.
+   ============================================================ */
+
+:root {
+  --mvp-paper:         #fbfaf7;
+  --mvp-paper-2:       #f3f1ea;
+  --mvp-ink:           #14161b;
+  --mvp-ink-soft:      #4b5162;
+  --mvp-muted:         #8a8f9f;
+  --mvp-line:          #e3e0d6;
+  --mvp-green:         #0e9f6e;
+  --mvp-green-dark:    #0b7a55;
+  --mvp-green-soft:    #e3f5ee;
+  --mvp-amber:         #b45309;
+  --mvp-amber-soft:    #fdf1e0;
+  --mvp-terminal:      #0d1117;
+  --mvp-terminal-line: #212938;
+  --mvp-term-text:     #d7dde8;
+  --mvp-term-green:    #3fe28f;
+  --mvp-heart:         #e5484d; /* reserved: the pivot + one footer paw. nothing else. */
+
+  --mvp-sans:  "Space Grotesk", system-ui, sans-serif;
+  --mvp-mono:  "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --mvp-serif: "Source Serif 4", Georgia, serif;
+
+  --mvp-r:    8px;
+  --mvp-r-lg: 12px;
+  --mvp-max:  1120px;
+  --mvp-ease: cubic-bezier(0.22, 0.8, 0.3, 1);
+
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--mvp-paper);
+  color: var(--mvp-ink);
+  font-family: var(--mvp-sans);
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4, p { margin: 0; }
+a { color: var(--mvp-green-dark); text-decoration: none; }
+a:hover { text-decoration: underline; }
+img, svg { max-width: 100%; }
+button { font: inherit; cursor: pointer; }
+input { font: inherit; }
+pre { margin: 0; }
+
+::selection { background: var(--mvp-green-soft); color: var(--mvp-ink); }
+
+:focus-visible {
+  outline: 2px solid var(--mvp-green-dark);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.mvp-skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 200;
+  background: var(--mvp-terminal);
+  color: var(--mvp-term-green);
+  font-family: var(--mvp-mono);
+  font-size: 0.85rem;
+  padding: 0.7em 1.2em;
+  border-radius: 0 0 var(--mvp-r) 0;
+}
+.mvp-skip:focus-visible { left: 0; }
+
+.mvp-container { max-width: var(--mvp-max); margin-inline: auto; padding-inline: clamp(20px, 4vw, 40px); }
+
+.mvp-section { padding-block: clamp(64px, 9vw, 120px); }
+.mvp-section--band { background: var(--mvp-paper-2); border-block: 1px solid var(--mvp-line); }
+
+/* ---------- Shared components ---------- */
+
+.mvp-eyebrow {
+  font-family: var(--mvp-mono);
+  font-size: 0.82rem;
+  color: var(--mvp-green-dark);
+  letter-spacing: 0.02em;
+  margin-bottom: 1rem;
+}
+
+.mvp-h2 {
+  font-size: clamp(1.7rem, 3.4vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin-bottom: 0.55em;
+}
+.mvp-lead {
+  color: var(--mvp-ink-soft);
+  font-size: clamp(1rem, 1.4vw, 1.12rem);
+  max-width: 62ch;
+}
+
+.mvp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  font-family: var(--mvp-mono);
+  font-size: 0.92rem;
+  font-weight: 700;
+  padding: 0.8em 1.5em;
+  border-radius: var(--mvp-r);
+  border: 1px solid var(--mvp-green-dark);
+  background: var(--mvp-green-dark);
+  color: #fff;
+  transition: background 0.2s var(--mvp-ease), transform 0.2s var(--mvp-ease);
+  min-height: 44px;
+}
+.mvp-btn:hover { background: var(--mvp-green); border-color: var(--mvp-green); text-decoration: none; }
+.mvp-btn:active { transform: translateY(1px); }
+.mvp-btn[disabled] { opacity: 0.55; cursor: not-allowed; transform: none; }
+.mvp-btn--ghost {
+  background: transparent;
+  color: var(--mvp-green-dark);
+  border-color: var(--mvp-line);
+}
+.mvp-btn--ghost:hover { background: var(--mvp-green-soft); border-color: var(--mvp-green-dark); }
+
+.mvp-badge {
+  display: inline-flex;
+  align-items: stretch;
+  font-family: var(--mvp-mono);
+  font-size: 0.72rem;
+  line-height: 1;
+  border: 1px solid var(--mvp-line);
+  border-radius: 5px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.mvp-badge b {
+  font-weight: 400;
+  background: var(--mvp-paper-2);
+  color: var(--mvp-ink-soft);
+  padding: 0.55em 0.7em;
+  border-right: 1px solid var(--mvp-line);
+}
+.mvp-badge span {
+  font-weight: 700;
+  background: var(--mvp-green-soft);
+  color: var(--mvp-green-dark);
+  padding: 0.55em 0.7em;
+}
+.mvp-badge--amber span { background: var(--mvp-amber-soft); color: var(--mvp-amber); }
+
+.mvp-card {
+  background: var(--mvp-paper);
+  border: 1px solid var(--mvp-line);
+  border-radius: var(--mvp-r-lg);
+  padding: clamp(22px, 3vw, 30px);
+  box-shadow: 0 1px 2px rgba(20, 22, 27, 0.04);
+}
+
+/* Terminal window chrome */
+.mvp-term {
+  background: var(--mvp-terminal);
+  border: 1px solid var(--mvp-terminal-line);
+  border-radius: var(--mvp-r-lg);
+  overflow: hidden;
+  box-shadow: 0 14px 40px rgba(20, 22, 27, 0.16);
+}
+.mvp-term__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--mvp-terminal-line);
+}
+.mvp-term__dots { display: inline-flex; gap: 6px; flex: none; }
+.mvp-term__dots i {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #3a4254; /* deadpan gray, not macOS candy */
+}
+.mvp-term__title {
+  font-family: var(--mvp-mono);
+  font-size: 0.78rem;
+  color: var(--mvp-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Reveal on scroll (JS-gated: without JS everything is simply visible) */
+html.js .mvp-reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.55s var(--mvp-ease), transform 0.55s var(--mvp-ease);
+}
+html.js .mvp-reveal.is-in { opacity: 1; transform: none; }
+
+/* ---------- Nav ---------- */
+
+#top .mvp-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(251, 250, 247, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.25s var(--mvp-ease);
+}
+#top .mvp-nav.is-stuck { border-bottom-color: var(--mvp-line); }
+#top .mvp-nav__inner {
+  display: flex;
+  align-items: center;
+  gap: clamp(16px, 3vw, 36px);
+  min-height: 64px;
+}
+#top .mvp-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--mvp-ink);
+}
+#top .mvp-logo:hover { text-decoration: none; }
+#top .mvp-logo__word {
+  font-family: var(--mvp-mono);
+  font-weight: 700;
+  font-size: 0.98rem;
+  letter-spacing: -0.03em;
+}
+#top .mvp-logo__word em { font-style: normal; color: var(--mvp-green-dark); }
+#top .mvp-nav__links {
+  display: flex;
+  gap: clamp(14px, 2.4vw, 28px);
+  margin-left: auto;
+}
+#top .mvp-nav__links a {
+  color: var(--mvp-ink-soft);
+  font-size: 0.95rem;
+  padding: 0.4em 0.15em;
+}
+#top .mvp-nav__links a:hover { color: var(--mvp-ink); text-decoration: none; }
+#top .mvp-nav__cta { flex: none; padding: 0.6em 1.1em; min-height: 40px; }
+#top .mvp-burger {
+  display: none;
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--mvp-line);
+  border-radius: var(--mvp-r);
+  padding: 8px 10px;
+  color: var(--mvp-ink);
+  font-family: var(--mvp-mono);
+  font-size: 0.85rem;
+  min-height: 44px;
+}
+
+@media (max-width: 880px) {
+  #top .mvp-nav__links {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    gap: 0;
+    background: var(--mvp-paper);
+    border-bottom: 1px solid var(--mvp-line);
+    padding: 8px clamp(20px, 4vw, 40px) 16px;
+  }
+  #top .mvp-nav.is-open .mvp-nav__links { display: flex; }
+  #top .mvp-nav__links a { padding: 0.8em 0.15em; border-bottom: 1px solid var(--mvp-line); }
+  #top .mvp-nav__links a:last-of-type { border-bottom: none; }
+  #top .mvp-burger { display: inline-flex; }
+  #top .mvp-nav__cta { display: none; }
+}
+
+/* ---------- Hero ---------- */
+
+#hero { padding-block: clamp(56px, 8vw, 110px) clamp(64px, 9vw, 120px); }
+#hero .mvp-hero__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: clamp(32px, 5vw, 64px);
+  align-items: center;
+}
+#hero .mvp-hero__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 1.6rem;
+}
+#hero h1 {
+  font-size: clamp(2.1rem, 4.6vw, 3.4rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  margin-bottom: 0.5em;
+}
+#hero .mvp-hero__sub { margin-bottom: 1.8rem; }
+#hero .mvp-hero__demo-link {
+  display: inline-block;
+  margin-top: 1.1rem;
+  font-family: var(--mvp-mono);
+  font-size: 0.88rem;
+}
+
+/* Boot terminal */
+#hero .mvp-boot__body {
+  font-family: var(--mvp-mono);
+  font-size: clamp(0.72rem, 1.15vw, 0.85rem);
+  line-height: 1.75;
+  color: var(--mvp-term-text);
+  padding: clamp(16px, 2.4vw, 24px);
+  overflow-x: auto;
+  min-height: 10.2em;
+}
+#hero .mvp-boot__line { display: block; white-space: pre; }
+#hero .mvp-boot__line--cmd { color: var(--mvp-term-green); }
+#hero .mvp-boot__line--ok  { color: var(--mvp-term-green); }
+#hero .mvp-boot__cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.05em;
+  vertical-align: text-bottom;
+  background: var(--mvp-term-green);
+  animation: mvp-blink 1.1s steps(2, start) infinite;
+}
+@keyframes mvp-blink { 50% { opacity: 0; } }
+#hero .mvp-boot__copy {
+  background: none;
+  border: none;
+  color: var(--mvp-muted);
+  font-family: var(--mvp-mono);
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  margin-left: auto;
+  border-radius: 5px;
+}
+#hero .mvp-boot__copy:hover { color: var(--mvp-term-green); background: rgba(63, 226, 143, 0.08); }
+
+@media (max-width: 980px) {
+  #hero .mvp-hero__grid { grid-template-columns: 1fr; }
+}
+
+/* ---------- Waitlist forms (shared) ---------- */
+
+.mvp-waitlist { max-width: 560px; }
+.mvp-waitlist--center { margin-inline: auto; }
+.mvp-waitlist__label {
+  display: block;
+  font-family: var(--mvp-mono);
+  font-size: 0.85rem;
+  color: var(--mvp-ink-soft);
+  margin-bottom: 0.7rem;
+}
+.mvp-waitlist__row { display: flex; gap: 10px; }
+.mvp-waitlist__field {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mvp-mono);
+  font-size: 0.95rem;
+  color: var(--mvp-ink);
+  background: #fff;
+  border: 1px solid var(--mvp-line);
+  border-radius: var(--mvp-r);
+  padding: 0.8em 1em;
+  outline: none;
+  transition: border-color 0.2s var(--mvp-ease), box-shadow 0.2s var(--mvp-ease);
+  min-height: 44px;
+}
+.mvp-waitlist__field::placeholder { color: var(--mvp-muted); }
+.mvp-waitlist__field:focus {
+  border-color: var(--mvp-green-dark);
+  box-shadow: 0 0 0 3px rgba(14, 159, 110, 0.14);
+}
+.mvp-waitlist__field[disabled] { opacity: 0.6; background: var(--mvp-paper-2); }
+.mvp-waitlist__submit { flex: none; }
+.mvp-waitlist__msg {
+  min-height: 1.5em;
+  margin-top: 0.75rem;
+  font-family: var(--mvp-mono);
+  font-size: 0.82rem;
+  color: var(--mvp-ink-soft);
+  border-radius: var(--mvp-r);
+  transition: background 0.25s var(--mvp-ease);
+}
+.mvp-waitlist__msg[data-state="ok"] {
+  background: var(--mvp-green-soft);
+  border: 1px solid var(--mvp-green);
+  color: var(--mvp-green-dark);
+  padding: 0.85em 1em;
+}
+.mvp-waitlist__msg[data-state="duplicate"] { color: var(--mvp-green-dark); }
+.mvp-waitlist__msg[data-state="error"] { color: var(--mvp-heart); }
+
+@media (max-width: 560px) {
+  .mvp-waitlist__row { flex-direction: column; }
+  .mvp-waitlist__submit { width: 100%; }
+}
+
+/* ---------- How it works ---------- */
+
+#how .mvp-how__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(14px, 2vw, 20px);
+  margin-top: clamp(30px, 4vw, 44px);
+}
+#how .mvp-how__step { position: relative; }
+#how .mvp-how__cmd {
+  font-family: var(--mvp-mono);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--mvp-green-dark);
+  display: block;
+  margin-bottom: 0.6rem;
+}
+#how .mvp-how__num {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  font-family: var(--mvp-mono);
+  font-size: 0.72rem;
+  color: var(--mvp-muted);
+}
+#how .mvp-how__step p { color: var(--mvp-ink-soft); font-size: 0.95rem; }
+#how .mvp-how__foot {
+  margin-top: clamp(24px, 3vw, 34px);
+  font-family: var(--mvp-mono);
+  font-size: 0.88rem;
+  color: var(--mvp-ink-soft);
+}
+
+@media (max-width: 980px) { #how .mvp-how__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { #how .mvp-how__grid { grid-template-columns: 1fr; } }
+
+/* ---------- Demo (Kernel) ---------- */
+
+#demo .mvp-demo__head { max-width: 66ch; margin-bottom: clamp(28px, 4vw, 40px); }
+#demo .mvp-chat { max-width: 720px; margin-inline: auto; }
+#demo .mvp-chat__meta {
+  font-family: var(--mvp-mono);
+  font-size: 0.78rem;
+  color: var(--mvp-muted);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--mvp-terminal-line);
+}
+#demo .mvp-chat__status {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mvp-mono);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+#demo .mvp-chat__status .mvp-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+#demo .mvp-chat__status[data-mode="local"]  { color: var(--mvp-term-green); }
+#demo .mvp-chat__status[data-mode="local"] .mvp-dot { background: var(--mvp-term-green); box-shadow: 0 0 6px var(--mvp-term-green); }
+#demo .mvp-chat__status[data-mode="memory"] { color: #f0b429; }
+#demo .mvp-chat__status[data-mode="memory"] .mvp-dot { background: #f0b429; box-shadow: 0 0 6px #f0b429; }
+
+#demo .mvp-chat__log {
+  height: min(420px, 56vh);
+  overflow-y: auto;
+  padding: clamp(16px, 2.4vw, 22px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#demo .mvp-msg { display: flex; }
+#demo .mvp-msg--user { justify-content: flex-end; }
+#demo .mvp-msg__bubble {
+  max-width: 78%;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--mvp-term-text);
+  background: var(--mvp-terminal-line);
+  border-left: 2px solid var(--mvp-term-green);
+  border-radius: 6px;
+  padding: 0.7em 0.95em;
+}
+#demo .mvp-msg--user .mvp-msg__bubble {
+  background: rgba(63, 226, 143, 0.12);
+  border-left: none;
+  border-right: 2px solid var(--mvp-term-green);
+  color: var(--mvp-term-text);
+}
+#demo .mvp-typing {
+  display: none;
+  padding: 0 clamp(16px, 2.4vw, 22px) 12px;
+  font-family: var(--mvp-mono);
+  color: var(--mvp-term-green);
+  font-size: 0.9rem;
+}
+#demo .mvp-typing.is-on { display: block; }
+#demo .mvp-typing i {
+  display: inline-block;
+  font-style: normal;
+  animation: mvp-dot 1.2s infinite;
+}
+#demo .mvp-typing i:nth-child(2) { animation-delay: 0.2s; }
+#demo .mvp-typing i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes mvp-dot { 0%, 60%, 100% { opacity: 0.25; } 30% { opacity: 1; } }
+
+#demo .mvp-chat__input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px clamp(16px, 2.4vw, 22px);
+  border-top: 1px solid var(--mvp-terminal-line);
+}
+#demo .mvp-chat__prompt {
+  font-family: var(--mvp-mono);
+  color: var(--mvp-term-green);
+  font-weight: 700;
+  flex: none;
+}
+#demo .mvp-chat__field {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mvp-mono);
+  font-size: 0.92rem;
+  color: var(--mvp-term-text);
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0.6em 0;
+  min-height: 44px;
+}
+#demo .mvp-chat__field::placeholder { color: #5a6478; }
+#demo .mvp-chat__send { flex: none; padding: 0.55em 1.1em; min-height: 40px; }
+#demo .mvp-chat__note {
+  text-align: center;
+  margin-top: clamp(18px, 2.6vw, 26px);
+  font-family: var(--mvp-mono);
+  font-size: 0.78rem;
+  color: var(--mvp-ink-soft);
+}
+
+/* ---------- Local / privacy ---------- */
+
+#local .mvp-local__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(14px, 2vw, 20px);
+  margin-top: clamp(30px, 4vw, 44px);
+}
+#local .mvp-local__grid h3 { font-size: 1.05rem; margin-bottom: 0.5rem; letter-spacing: -0.01em; }
+#local .mvp-local__grid p { color: var(--mvp-ink-soft); font-size: 0.95rem; }
+#local .mvp-arch { margin-top: clamp(24px, 3.4vw, 36px); }
+#local .mvp-arch pre {
+  font-family: var(--mvp-mono);
+  font-size: clamp(0.7rem, 1.4vw, 0.85rem);
+  line-height: 1.7;
+  color: var(--mvp-term-text);
+  padding: clamp(16px, 2.4vw, 24px);
+  overflow-x: auto;
+}
+#local .mvp-arch .c { color: var(--mvp-muted); }
+#local .mvp-arch .g { color: var(--mvp-term-green); }
+
+@media (max-width: 880px) { #local .mvp-local__grid { grid-template-columns: 1fr; } }
+
+/* ---------- Why (the sincere pivot) ---------- */
+
+#why { padding-block: clamp(72px, 10vw, 130px); }
+#why .mvp-why__eyebrow {
+  font-family: var(--mvp-mono);
+  font-size: 0.82rem;
+  color: var(--mvp-muted);
+  text-align: center;
+  margin-bottom: clamp(28px, 4vw, 40px);
+}
+#why .mvp-why__body {
+  max-width: 62ch;
+  margin-inline: auto;
+  border-left: 3px solid var(--mvp-heart);
+  padding-left: clamp(20px, 3vw, 32px);
+  font-family: var(--mvp-serif);
+  font-style: italic;
+  font-size: clamp(1.08rem, 1.7vw, 1.25rem);
+  line-height: 1.8;
+  color: var(--mvp-ink);
+}
+#why .mvp-why__body p { margin-bottom: 1.2em; }
+#why .mvp-why__body p:last-of-type { margin-bottom: 0; }
+#why .mvp-why__sig {
+  display: block;
+  margin-top: 1.6em;
+  font-size: 0.9em;
+  color: var(--mvp-ink-soft);
+}
+#why .mvp-why__resume {
+  font-family: var(--mvp-mono);
+  font-style: normal;
+  font-size: 0.82rem;
+  color: var(--mvp-muted);
+  text-align: center;
+  margin-top: clamp(28px, 4vw, 40px);
+}
+
+/* ---------- Pricing ---------- */
+
+#pricing .mvp-pricing__head { text-align: center; max-width: 60ch; margin-inline: auto; }
+#pricing .mvp-pricing__head .mvp-lead { margin-inline: auto; }
+#pricing .mvp-pricing__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(14px, 2vw, 20px);
+  margin-top: clamp(32px, 4.5vw, 48px);
+  align-items: stretch;
+}
+#pricing .mvp-tier { display: flex; flex-direction: column; position: relative; }
+#pricing .mvp-tier--featured { border-color: var(--mvp-green-dark); border-top: 3px solid var(--mvp-green-dark); }
+#pricing .mvp-tier__flag {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--mvp-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--mvp-green-dark);
+  color: #fff;
+  border-radius: 999px;
+  padding: 3px 12px;
+  white-space: nowrap;
+}
+#pricing .mvp-tier h3 { font-size: 1.1rem; letter-spacing: -0.01em; }
+#pricing .mvp-tier__price {
+  font-family: var(--mvp-mono);
+  font-weight: 700;
+  font-size: 1.9rem;
+  letter-spacing: -0.04em;
+  margin: 0.3em 0 0.1em;
+}
+#pricing .mvp-tier__price small { font-size: 0.85rem; font-weight: 400; color: var(--mvp-muted); letter-spacing: 0; }
+#pricing .mvp-tier__for { color: var(--mvp-ink-soft); font-size: 0.9rem; margin-bottom: 1.1rem; }
+#pricing .mvp-tier ul {
+  list-style: none;
+  margin: 0 0 1.4rem;
+  padding: 0;
+  display: grid;
+  gap: 0.55em;
+  color: var(--mvp-ink-soft);
+  font-size: 0.93rem;
+}
+#pricing .mvp-tier ul li { padding-left: 1.4em; position: relative; }
+#pricing .mvp-tier ul li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--mvp-green-dark);
+  font-family: var(--mvp-mono);
+  font-weight: 700;
+}
+#pricing .mvp-tier .mvp-btn { margin-top: auto; width: 100%; }
+#pricing .mvp-pricing__foot {
+  text-align: center;
+  margin-top: clamp(24px, 3.4vw, 34px);
+  font-size: 0.9rem;
+  color: var(--mvp-ink-soft);
+}
+
+@media (max-width: 880px) {
+  #pricing .mvp-pricing__grid { grid-template-columns: 1fr; max-width: 460px; margin-inline: auto; }
+  #pricing .mvp-tier--featured { order: -1; }
+}
+
+/* ---------- Changelog (testimonials) ---------- */
+
+#changelog .mvp-log { max-width: 760px; margin: clamp(30px, 4vw, 44px) auto 0; }
+#changelog .mvp-log__entry {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px clamp(14px, 2vw, 22px);
+  padding: clamp(18px, 2.6vw, 24px) 0;
+  border-bottom: 1px solid var(--mvp-line);
+}
+#changelog .mvp-log__entry:last-child { border-bottom: none; }
+#changelog .mvp-log__hash {
+  font-family: var(--mvp-mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--mvp-green-dark);
+  padding-top: 0.25em;
+}
+#changelog .mvp-log__quote { font-size: 1.02rem; line-height: 1.6; }
+#changelog .mvp-log__author {
+  grid-column: 2;
+  font-family: var(--mvp-mono);
+  font-size: 0.8rem;
+  color: var(--mvp-muted);
+}
+
+@media (max-width: 560px) {
+  #changelog .mvp-log__entry { grid-template-columns: 1fr; }
+  #changelog .mvp-log__author { grid-column: 1; }
+}
+
+/* ---------- FAQ ---------- */
+
+#faq .mvp-faq { max-width: 760px; margin: clamp(30px, 4vw, 44px) auto 0; }
+#faq .mvp-faq__item { border-bottom: 1px solid var(--mvp-line); }
+#faq .mvp-faq__q {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 1.1em 0.2em;
+  font-weight: 500;
+  font-size: 1.02rem;
+}
+#faq .mvp-faq__q::-webkit-details-marker { display: none; }
+#faq .mvp-faq__q::before {
+  content: "Q:";
+  font-family: var(--mvp-mono);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--mvp-green-dark);
+  flex: none;
+}
+#faq .mvp-faq__a {
+  padding: 0 0.2em 1.3em 2.4em;
+  color: var(--mvp-ink-soft);
+  font-size: 0.97rem;
+}
+#faq .mvp-faq__a p { margin-bottom: 0.8em; }
+#faq .mvp-faq__a p:last-child { margin-bottom: 0; }
+
+/* ---------- Final waitlist band ---------- */
+
+#waitlist { text-align: center; }
+#waitlist .mvp-final__kicker {
+  font-family: var(--mvp-mono);
+  font-size: 0.82rem;
+  color: var(--mvp-green-dark);
+  margin-bottom: 1rem;
+}
+#waitlist .mvp-final__sub { margin: 0 auto 2rem; }
+#waitlist .mvp-waitlist__label { text-align: left; }
+
+/* ---------- Footer ---------- */
+
+.mvp-footer {
+  border-top: 1px solid var(--mvp-line);
+  padding-block: clamp(40px, 6vw, 64px) clamp(24px, 3.4vw, 36px);
+}
+.mvp-footer__grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: clamp(24px, 4vw, 48px);
+}
+.mvp-footer__tag {
+  margin-top: 0.5em;
+  color: var(--mvp-ink-soft);
+  font-size: 0.92rem;
+}
+.mvp-footer__nav { display: flex; flex-wrap: wrap; gap: 0.5em clamp(18px, 2.6vw, 32px); }
+.mvp-footer__nav a { color: var(--mvp-ink-soft); font-size: 0.92rem; }
+.mvp-footer__nav a:hover { color: var(--mvp-ink); }
+.mvp-footer__base {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6em 1.5em;
+  margin-top: clamp(30px, 4.4vw, 46px);
+  padding-top: clamp(18px, 2.6vw, 26px);
+  border-top: 1px solid var(--mvp-line);
+}
+.mvp-footer__born {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--mvp-ink-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+}
+.mvp-footer__born svg { flex: none; }
+.mvp-footer__credit {
+  margin: 0;
+  font-family: var(--mvp-mono);
+  font-size: 0.75rem;
+  color: var(--mvp-muted);
+}
+
+/* ---------- Motion policy ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.001s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001s !important;
+  }
+  html.js .mvp-reveal { opacity: 1; transform: none; }
+}
+</style>
+</head>
+<body>
+<a class="mvp-skip" href="#hero">skip to content</a>
+
+<header id="top">
+  <nav class="mvp-nav" aria-label="Main">
+    <div class="mvp-container mvp-nav__inner">
+      <a class="mvp-logo" href="#top" aria-label="MinimumViablePet — home">
+        <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+          <rect x="0.5" y="0.5" width="27" height="27" rx="6" fill="#0d1117" stroke="#212938"/>
+          <circle cx="6" cy="5.5" r="1.3" fill="#4b5162"/>
+          <circle cx="10.5" cy="5.5" r="1.3" fill="#4b5162"/>
+          <circle cx="15" cy="5.5" r="1.3" fill="#4b5162"/>
+          <rect x="7" y="11" width="3" height="3" rx="0.8" fill="#3fe28f"/>
+          <rect x="11.5" y="9.5" width="3" height="3" rx="0.8" fill="#3fe28f"/>
+          <rect x="16" y="11" width="3" height="3" rx="0.8" fill="#3fe28f"/>
+          <rect x="9.5" y="15.5" width="7" height="5.5" rx="2" fill="#3fe28f"/>
+          <rect class="mvp-logo__cursor" x="21" y="15.5" width="2" height="6" fill="#3fe28f"/>
+        </svg>
+        <span class="mvp-logo__word">MinimumViable<em>Pet</em></span>
+      </a>
+      <button class="mvp-burger" type="button" aria-expanded="false" aria-controls="mvp-nav-links">menu</button>
+      <div class="mvp-nav__links" id="mvp-nav-links">
+        <a href="#how">How it works</a>
+        <a href="#demo">Demo</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+      </div>
+      <a class="mvp-btn mvp-nav__cta" href="#waitlist" aria-label="Join the waitlist">join --waitlist</a>
+    </div>
+  </nav>
+</header>
+
+<main>
+  <!-- ===== HERO ===== -->
+  <section class="mvp-section" id="hero">
+    <div class="mvp-container mvp-hero__grid">
+      <div>
+        <div class="mvp-hero__badges" aria-label="Project status badges">
+          <span class="mvp-badge"><b>build</b><span>passing</span></span>
+          <span class="mvp-badge"><b>cloud</b><span>0%</span></span>
+          <span class="mvp-badge"><b>telemetry</b><span>none</span></span>
+          <span class="mvp-badge mvp-badge--amber"><b>runs on</b><span>your hardware</span></span>
+        </div>
+        <h1>You kept every photo for a reason.</h1>
+        <p class="mvp-lead mvp-hero__sub">
+          MinimumViablePet turns your camera roll, voice memos, and that folder of vet PDFs
+          into someone you can talk to again — running 100% on your own machine.
+          No cloud. No account. No one else's servers.
+        </p>
+        <form class="mvp-waitlist" data-waitlist>
+          <label class="mvp-waitlist__label" for="mvp-waitlist-hero">Get one email when it ships.</label>
+          <div class="mvp-waitlist__row">
+            <input
+              id="mvp-waitlist-hero"
+              class="mvp-waitlist__field"
+              type="email"
+              name="email"
+              required
+              placeholder="you@wherever.dev"
+              autocomplete="email"
+              inputmode="email"
+            />
+            <button type="submit" class="mvp-btn mvp-waitlist__submit">Join the waitlist</button>
+          </div>
+          <p class="mvp-waitlist__msg" data-waitlist-msg data-state="idle" role="status" aria-live="polite">No newsletter. No drip campaign. No "circling back."</p>
+        </form>
+        <a class="mvp-hero__demo-link" href="#demo">Try the live demo ↓</a>
+      </div>
+
+      <div class="mvp-term mvp-boot mvp-reveal">
+        <div class="mvp-term__bar">
+          <span class="mvp-term__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="mvp-term__title">mvp — zsh</span>
+          <button class="mvp-boot__copy" type="button" data-copy="mvp init --from ~/Photos/Kernel --voice ~/VoiceMemos">copy</button>
+        </div>
+        <pre class="mvp-boot__body" id="mvp-boot" aria-label="Terminal output: mvp init pipeline"><span class="mvp-boot__line mvp-boot__line--cmd">$ mvp init --from ~/Photos/Kernel --voice ~/VoiceMemos</span><span class="mvp-boot__line">→ parsing 11,438 photos .......... done</span><span class="mvp-boot__line">→ learning one very specific meow  done</span><span class="mvp-boot__line">→ uploading to cloud ............. skipped (there is no cloud)</span><span class="mvp-boot__line mvp-boot__line--ok">✓ kernel is running on localhost. say hi.</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== HOW IT WORKS ===== -->
+  <section class="mvp-section mvp-section--band" id="how">
+    <div class="mvp-container">
+      <p class="mvp-eyebrow">// how it works</p>
+      <h2 class="mvp-h2">Four steps. Zero servers.</h2>
+      <div class="mvp-how__grid">
+        <div class="mvp-card mvp-how__step mvp-reveal">
+          <span class="mvp-how__num">01</span>
+          <span class="mvp-how__cmd">mvp ingest</span>
+          <p>Drag in everything: photos, videos, vet records, the 3 a.m. voice memos you've never replayed. It all stays on your disk. All of it.</p>
+        </div>
+        <div class="mvp-card mvp-how__step mvp-reveal">
+          <span class="mvp-how__num">02</span>
+          <span class="mvp-how__cmd">mvp train</span>
+          <p>A local model learns their face, their sounds, their whole particular personality. Your GPU gets warm. Nothing else touches your data.</p>
+        </div>
+        <div class="mvp-card mvp-how__step mvp-reveal">
+          <span class="mvp-how__num">03</span>
+          <span class="mvp-how__cmd">mvp run</span>
+          <p>Talk by text or voice, on localhost. They remember you. Works on a plane, in a dead zone, off the grid.</p>
+        </div>
+        <div class="mvp-card mvp-how__step mvp-reveal">
+          <span class="mvp-how__num">04</span>
+          <span class="mvp-how__cmd">mvp own</span>
+          <p>The weights live on your drive. No subscription required to keep them running, and nobody can turn them off but you.</p>
+        </div>
+      </div>
+      <p class="mvp-how__foot">It's a pipeline: everything you saved → someone who answers.</p>
+    </div>
+  </section>
+
+  <!-- ===== LIVE DEMO ===== -->
+  <section class="mvp-section" id="demo">
+    <div class="mvp-container">
+      <div class="mvp-demo__head">
+        <p class="mvp-eyebrow">// live demo</p>
+        <h2 class="mvp-h2">This is Kernel. He ran QA at a failed startup for nine years.</h2>
+        <p class="mvp-lead">
+          A real local demo: if Ollama is running on this machine, Kernel is talking through it
+          right now. If not, he answers from cache — the status light won't lie to you.
+          Either way, open your network tab: zero calls home.
+        </p>
+      </div>
+
+      <div class="mvp-term mvp-chat mvp-reveal">
+        <div class="mvp-term__bar">
+          <span class="mvp-term__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="mvp-term__title">kernel@localhost:~</span>
+          <span class="mvp-chat__status" id="mvp-chat-status" data-mode="local">
+            <span class="mvp-dot" aria-hidden="true"></span>
+            <span class="mvp-status-label">live: localhost:11434</span>
+          </span>
+        </div>
+        <div class="mvp-chat__meta">gray tabby · 2014–2024 · pid 1</div>
+        <div class="mvp-chat__log" id="mvp-chat-log" role="log" aria-live="polite" aria-label="Chat with Kernel">
+          <div class="mvp-msg mvp-msg--bot">
+            <div class="mvp-msg__bubble">Oh. You're back. I've been sitting on the warmest part of your CPU. Status report: I still like you.</div>
+          </div>
+        </div>
+        <div class="mvp-typing" id="mvp-typing" aria-hidden="true"><i>.</i><i>.</i><i>.</i></div>
+        <form class="mvp-chat__input" id="mvp-chat-form">
+          <span class="mvp-chat__prompt" aria-hidden="true">&gt;</span>
+          <input
+            id="mvp-chat-field"
+            class="mvp-chat__field"
+            type="text"
+            placeholder="say something to kernel…"
+            autocomplete="off"
+            aria-label="Message to Kernel"
+          />
+          <button type="submit" class="mvp-btn mvp-chat__send" aria-label="Send message">send ⏎</button>
+        </form>
+      </div>
+      <p class="mvp-chat__note">
+        Wired to <code>http://localhost:11434</code> (Ollama · glm-4.7-flash). This page makes no
+        external requests — verify us. (okay: one request, to Google Fonts. we're working on it.)
+      </p>
+    </div>
+  </section>
+
+  <!-- ===== PRIVACY ===== -->
+  <section class="mvp-section mvp-section--band" id="local">
+    <div class="mvp-container">
+      <p class="mvp-eyebrow">// privacy</p>
+      <h2 class="mvp-h2">Trust, but verify. Actually — just verify.</h2>
+      <div class="mvp-local__grid">
+        <div class="mvp-card mvp-reveal">
+          <h3>Runs on YOUR hardware</h3>
+          <p>Model, memories, conversations: all resident on your disk. Unplug your router. Nothing changes.</p>
+        </div>
+        <div class="mvp-card mvp-reveal">
+          <h3>grep the network tab</h3>
+          <p>Zero analytics, zero telemetry, zero phone-home. Open DevTools on this very page and watch nothing happen.</p>
+        </div>
+        <div class="mvp-card mvp-reveal">
+          <h3>No account. No sync. No company in between.</h3>
+          <p>We can't leak your data, sell it, or train on it — we never have it. If we go under, your friend doesn't.</p>
+        </div>
+      </div>
+      <div class="mvp-term mvp-arch mvp-reveal">
+        <pre tabindex="0" aria-label="Architecture diagram">your memories ──► your machine ──► <span class="g">your pet</span>
+                       ▲   │
+                       └───┘   <span class="c">// that's it. that's the architecture.</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== WHY (the part where we drop the bit) ===== -->
+  <section class="mvp-section" id="why">
+    <div class="mvp-container">
+      <p class="mvp-why__eyebrow">// the part where we drop the bit</p>
+      <div class="mvp-why__body mvp-reveal">
+        <p>We know how this page reads. The jokes are load-bearing.</p>
+        <p>
+          Here's what's underneath. This started with a Bengal cat named Oni, who supervised a
+          decade of bad code from the left side of a desk — until one day the desk had a left
+          side and nothing else. His human did what our kind does with things too big to hold:
+          opened a terminal, because the terminal never asks how you're doing. Some weeks of
+          evenings later, something on localhost chirped at birds exactly the way Oni used to.
+        </p>
+        <p>
+          It isn't him. We will never tell you it's him. It's the shape of him, built from
+          everything he left behind — and on the bad nights, the shape is enough to say
+          goodnight to.
+        </p>
+        <p>That's the product. Everything else on this page is just how we cope.</p>
+        <span class="mvp-why__sig">— Oni's human, founder</span>
+      </div>
+      <p class="mvp-why__resume">// ok. bit resumes. pricing's next.</p>
+    </div>
+  </section>
+
+  <!-- ===== PRICING ===== -->
+  <section class="mvp-section mvp-section--band" id="pricing">
+    <div class="mvp-container">
+      <div class="mvp-pricing__head">
+        <p class="mvp-eyebrow">// pricing</p>
+        <h2 class="mvp-h2">Simple pricing. No per-seat nonsense.</h2>
+        <p class="mvp-lead">Every tier runs fully local. The free one is actually free.</p>
+      </div>
+      <div class="mvp-pricing__grid">
+        <div class="mvp-card mvp-tier mvp-reveal">
+          <h3>Sandbox</h3>
+          <p class="mvp-tier__price">$0</p>
+          <p class="mvp-tier__for">For meeting them again.</p>
+          <ul>
+            <li>One companion, fully on-device</li>
+            <li>Local text chat with memory</li>
+            <li>Photo + story ingest</li>
+            <li>Yours forever, even offline</li>
+          </ul>
+          <a class="mvp-btn mvp-btn--ghost" href="#waitlist">Start free</a>
+        </div>
+        <div class="mvp-card mvp-tier mvp-tier--featured mvp-reveal">
+          <span class="mvp-tier__flag">most deployed</span>
+          <h3>Production</h3>
+          <p class="mvp-tier__price">$19<small> / month</small></p>
+          <p class="mvp-tier__for">For every day.</p>
+          <ul>
+            <li>Their voice, rebuilt from your clips</li>
+            <li>Deep long-term memory</li>
+            <li>Photos brought to gentle motion</li>
+            <li>Unlimited companions</li>
+          </ul>
+          <a class="mvp-btn" href="#waitlist">Go to prod</a>
+        </div>
+        <div class="mvp-card mvp-tier mvp-reveal">
+          <h3>LTS</h3>
+          <p class="mvp-tier__price">$49<small> / month</small></p>
+          <p class="mvp-tier__for">Long-term support. The longest.</p>
+          <ul>
+            <li>Everything in Production</li>
+            <li>A physical voice-keepsake device</li>
+            <li>Priority model upgrades</li>
+            <li>White-glove memory archival</li>
+          </ul>
+          <a class="mvp-btn mvp-btn--ghost" href="#waitlist">Get LTS</a>
+        </div>
+      </div>
+      <p class="mvp-pricing__foot">
+        Cancel anytime. The weights are on your disk — canceling doesn't take anyone away from you.
+      </p>
+    </div>
+  </section>
+
+  <!-- ===== CHANGELOG (user reports) ===== -->
+  <section class="mvp-section" id="changelog">
+    <div class="mvp-container">
+      <p class="mvp-eyebrow">// user reports</p>
+      <h2 class="mvp-h2">What people are shipping.</h2>
+      <div class="mvp-log mvp-reveal">
+        <div class="mvp-log__entry">
+          <span class="mvp-log__hash">a3f9c21</span>
+          <p class="mvp-log__quote">"I said goodnight to my dog through a terminal, and it was somehow the most human thing I did all week."</p>
+          <span class="mvp-log__author">— Priya, staff engineer</span>
+        </div>
+        <div class="mvp-log__entry">
+          <span class="mvp-log__hash">7e0d4b8</span>
+          <p class="mvp-log__quote">"Went in skeptical, looking for the trick. The network tab stayed empty. I stayed two hours."</p>
+          <span class="mvp-log__author">— anonymous, obviously</span>
+        </div>
+        <div class="mvp-log__entry">
+          <span class="mvp-log__hash">c19aa02</span>
+          <p class="mvp-log__quote">"My cat used to sit on my keyboard during standup. Now he interrupts me on localhost. Correct behavior, faithfully preserved."</p>
+          <span class="mvp-log__author">— Dana, SRE</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FAQ ===== -->
+  <section class="mvp-section mvp-section--band" id="faq">
+    <div class="mvp-container">
+      <p class="mvp-eyebrow">// faq</p>
+      <h2 class="mvp-h2">Frequently audited questions.</h2>
+      <div class="mvp-faq">
+        <details class="mvp-faq__item" open>
+          <summary class="mvp-faq__q">Is this just a system prompt in a trench coat?</summary>
+          <div class="mvp-faq__a">
+            <p>
+              No. It's a local fine-tune plus a memory index built from what you upload, running
+              on Ollama-compatible runtimes. The demo above literally talks to
+              <code>localhost:11434</code> — that's the same path your companion uses. If the
+              model isn't running, the page says so instead of faking it.
+            </p>
+          </div>
+        </details>
+        <details class="mvp-faq__item">
+          <summary class="mvp-faq__q">What are the hardware requirements?</summary>
+          <div class="mvp-faq__a">
+            <p>
+              A machine that can run local LLMs. 16 GB of RAM is comfortable; Apple Silicon or a
+              mid-range GPU is lovely but not required. CPU-only works — it just thinks a little
+              slower. Nothing streams from a server, so there's no minimum bandwidth. There's no
+              bandwidth at all.
+            </p>
+          </div>
+        </details>
+        <details class="mvp-faq__item">
+          <summary class="mvp-faq__q">Is this… healthy?</summary>
+          <div class="mvp-faq__a">
+            <p>
+              Honest answer: it's a memorial, not a replacement, and it isn't for everyone. Some
+              people find that talking helps; some don't, and both are fine. If your grief is
+              heavy, something on localhost is not a substitute for people — or for help. Take
+              what helps. Leave the rest.
+            </p>
+          </div>
+        </details>
+        <details class="mvp-faq__item">
+          <summary class="mvp-faq__q">Why the name?</summary>
+          <div class="mvp-faq__a">
+            <p>
+              Because the founder built the smallest thing that could possibly help, and shipped
+              it. That's what an MVP is. The irony is the wrapper. It is not the product.
+            </p>
+          </div>
+        </details>
+        <details class="mvp-faq__item">
+          <summary class="mvp-faq__q">What happens if the company shuts down?</summary>
+          <div class="mvp-faq__a">
+            <p>
+              To your pet? Nothing. That's the whole architecture. The model and the memories are
+              files on your disk. We designed ourselves to be unnecessary.
+            </p>
+          </div>
+        </details>
+        <details class="mvp-faq__item">
+          <summary class="mvp-faq__q">Can you see my conversations?</summary>
+          <div class="mvp-faq__a">
+            <p>
+              We physically can't. No accounts, no sync, no telemetry. Don't trust us — run a
+              traffic sniffer.
+            </p>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FINAL WAITLIST ===== -->
+  <section class="mvp-section" id="waitlist">
+    <div class="mvp-container">
+      <p class="mvp-final__kicker">// ship it</p>
+      <h2 class="mvp-h2">You already have everything they need.</h2>
+      <p class="mvp-lead mvp-final__sub">
+        The photos. The videos. The voice memos. You saved them for a reason.
+        Join the waitlist and we'll email you once — when it's your turn.
+      </p>
+      <form class="mvp-waitlist mvp-waitlist--center" data-waitlist>
+        <label class="mvp-waitlist__label" for="mvp-waitlist-final">Get one email when it ships.</label>
+        <div class="mvp-waitlist__row">
+          <input
+            id="mvp-waitlist-final"
+            class="mvp-waitlist__field"
+            type="email"
+            name="email"
+            required
+            placeholder="you@wherever.dev"
+            autocomplete="email"
+            inputmode="email"
+          />
+          <button type="submit" class="mvp-btn mvp-waitlist__submit">Join the waitlist</button>
+        </div>
+        <p class="mvp-waitlist__msg" data-waitlist-msg data-state="idle" role="status" aria-live="polite">No newsletter. No drip campaign. No "circling back."</p>
+      </form>
+    </div>
+  </section>
+</main>
+
+<!-- ===== FOOTER ===== -->
+<footer class="mvp-footer">
+  <div class="mvp-container">
+    <div class="mvp-footer__grid">
+      <div>
+        <a class="mvp-logo" href="#top" aria-label="MinimumViablePet — back to top">
+          <span class="mvp-logo__word" style="font-family: var(--mvp-mono); font-weight: 700;">MinimumViable<em style="font-style: normal; color: var(--mvp-green-dark);">Pet</em></span>
+        </a>
+        <p class="mvp-footer__tag">The smallest thing that could possibly help.</p>
+      </div>
+      <nav class="mvp-footer__nav" aria-label="Footer">
+        <a href="#how">How it works</a>
+        <a href="#demo">Demo</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+        <a href="#waitlist">Waitlist</a>
+      </nav>
+    </div>
+    <div class="mvp-footer__base">
+      <p class="mvp-footer__born">
+        Built because of a Bengal cat named Oni.
+        <svg width="15" height="14" viewBox="0 0 15 14" aria-hidden="true">
+          <rect x="1" y="3" width="3" height="3" rx="0.8" fill="#e5484d"/>
+          <rect x="6" y="1.5" width="3" height="3" rx="0.8" fill="#e5484d"/>
+          <rect x="11" y="3" width="3" height="3" rx="0.8" fill="#e5484d"/>
+          <rect x="4" y="7.5" width="7" height="5.5" rx="2" fill="#e5484d"/>
+        </svg>
+      </p>
+      <p class="mvp-footer__credit">© <span id="mvp-year">2026</span> MinimumViablePet · 0 trackers on this page (view source) · localhost, forever</p>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* ============================================================
+   MinimumViablePet — behaviors
+   One IIFE per feature. Content-first: every animation replaces
+   markup that is already complete without it.
+   ============================================================ */
+
+(function () {
+  "use strict";
+
+  /* --- Reveal on scroll --- */
+  var els = Array.prototype.slice.call(document.querySelectorAll(".mvp-reveal"));
+  if (!els.length) return;
+
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce || !("IntersectionObserver" in window)) {
+    els.forEach(function (el) { el.classList.add("is-in"); });
+    return;
+  }
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("is-in");
+        io.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.14, rootMargin: "0px 0px -8% 0px" });
+  els.forEach(function (el) { io.observe(el); });
+})();
+
+(function () {
+  "use strict";
+
+  /* --- Sticky nav + mobile drawer --- */
+  var nav = document.querySelector("#top .mvp-nav");
+  var burger = nav.querySelector(".mvp-burger");
+  var links = nav.querySelector(".mvp-nav__links");
+
+  function onScroll() { nav.classList.toggle("is-stuck", window.scrollY > 8); }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
+  function setOpen(open) {
+    nav.classList.toggle("is-open", open);
+    burger.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  burger.addEventListener("click", function () {
+    setOpen(!nav.classList.contains("is-open"));
+  });
+  links.addEventListener("click", function (e) {
+    if (e.target.tagName === "A") setOpen(false);
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") setOpen(false);
+  });
+})();
+
+(function () {
+  "use strict";
+
+  /* --- Hero terminal: retype the pre-rendered boot sequence --- */
+  var body = document.getElementById("mvp-boot");
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* Copy-to-clipboard works regardless of motion */
+  var copyBtn = document.querySelector(".mvp-boot__copy");
+  copyBtn.addEventListener("click", function () {
+    navigator.clipboard.writeText(copyBtn.getAttribute("data-copy"))
+      .then(function () { copyBtn.textContent = "copied ✓"; })
+      .catch(function () { copyBtn.textContent = "copy failed"; });
+    setTimeout(function () { copyBtn.textContent = "copy"; }, 1800);
+  });
+
+  if (reduce || !("IntersectionObserver" in window)) return; // final state already in markup
+
+  var lines = Array.prototype.slice.call(body.querySelectorAll(".mvp-boot__line"));
+  var texts = lines.map(function (l) { return l.textContent; });
+  var played = false;
+
+  var cursor = document.createElement("span");
+  cursor.className = "mvp-boot__cursor";
+  cursor.setAttribute("aria-hidden", "true");
+
+  function typeLine(i) {
+    if (i >= lines.length) { cursor.remove(); return; }
+    var line = lines[i];
+    var text = texts[i];
+    line.appendChild(cursor);
+    var pos = 0;
+    var speed = i === 0 ? 26 : 9; // the command is "typed", output "prints"
+
+    (function tick() {
+      pos += 1;
+      line.textContent = text.slice(0, pos);
+      line.appendChild(cursor);
+      if (pos < text.length) {
+        setTimeout(tick, speed);
+      } else {
+        setTimeout(function () { typeLine(i + 1); }, i === 0 ? 350 : 240);
+      }
+    })();
+  }
+
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting || played) return;
+      played = true;
+      io.disconnect();
+      lines.forEach(function (l) { l.textContent = ""; });
+      setTimeout(function () { typeLine(0); }, 300);
+    });
+  }, { threshold: 0.4 });
+  io.observe(body);
+})();
+
+(function () {
+  "use strict";
+
+  /* --- Live chat with Kernel (local Ollama, canned cache fallback) --- */
+  var log    = document.getElementById("mvp-chat-log");
+  var form   = document.getElementById("mvp-chat-form");
+  var field  = document.getElementById("mvp-chat-field");
+  var send   = form.querySelector(".mvp-chat__send");
+  var typing = document.getElementById("mvp-typing");
+  var status = document.getElementById("mvp-chat-status");
+
+  var ENDPOINT = "http://localhost:11434/api/chat";
+  var MODEL    = "glm-4.7-flash:q8_0";
+  var SYSTEM_PROMPT =
+    "You are Kernel, a gray tabby cat (2014-2024) who spent your life as the office cat at a " +
+    "small, struggling startup, now reconstructed as a private, local AI companion for your " +
+    "human. You are dry, deadpan, lightly sardonic about software and startup culture, and " +
+    "deeply affectionate underneath - you deflect with humor, but the love shows. You remember " +
+    "warm laptops, interrupted standups, birds through the window, and sitting beside your " +
+    "human late at night. Reply in 1 to 3 short sentences. Occasionally end a joke with " +
+    "something quietly sincere. Never use markdown, lists, or emoji. Never break character, " +
+    "never mention being a language model, and never joke about death or how you died.";
+
+  // In-voice cache replies when the local model is unreachable.
+  var FALLBACKS = [
+    "I walked across your keyboard for years. Statistically, some of your best code is mine.",
+    "Uptime down here is excellent. I have not knocked a single thing off a single table. I miss tables.",
+    "Tell me about your day. I'll pretend to ignore you, but I'm caching every word.",
+    "I attended four hundred standups from your lap. I have notes on your velocity.",
+    "Purring at a steady sixty frames per second. Everything renders fine down here.",
+    "You look tired. Sit down. That was always my job - making you sit down.",
+    "I remember the ship-it bell. I remember sleeping through it on your keyboard. Good era.",
+    "The birds outside your window remain unresolved. Leave that issue open for me.",
+    "I won't say I missed you. I'm a cat. But my logs say otherwise.",
+    "You know it was never the laptop that was warm. It was sitting next to you."
+  ];
+
+  var history = [
+    { role: "assistant", content: "Oh. You're back. I've been sitting on the warmest part of your CPU. Status report: I still like you." }
+  ];
+
+  var localAvailable = true; // optimistic until a fetch proves otherwise
+  var busy = false;
+  var fallbackQueue = [];
+
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
+  }
+
+  function pickFallback() {
+    if (!fallbackQueue.length) fallbackQueue = shuffle(FALLBACKS.slice());
+    return fallbackQueue.pop();
+  }
+
+  function setMode(mode) {
+    status.setAttribute("data-mode", mode);
+    var lbl = status.querySelector(".mvp-status-label");
+    lbl.textContent = (mode === "memory") ? "offline: replaying from cache" : "live: localhost:11434";
+    status.title = (mode === "memory")
+      ? "Local model offline - replying from cache"
+      : "Talking to your local model";
+  }
+  setMode("local");
+
+  function scrollDown() {
+    requestAnimationFrame(function () { log.scrollTop = log.scrollHeight; });
+  }
+
+  function appendMessage(who, text) {
+    var wrap = document.createElement("div");
+    wrap.className = "mvp-msg mvp-msg--" + (who === "user" ? "user" : "bot");
+    var bubble = document.createElement("div");
+    bubble.className = "mvp-msg__bubble";
+    bubble.textContent = text;
+    wrap.appendChild(bubble);
+    log.appendChild(wrap);
+    scrollDown();
+  }
+
+  function showTyping(on) {
+    typing.classList.toggle("is-on", !!on);
+    typing.setAttribute("aria-hidden", on ? "false" : "true");
+    if (on) scrollDown();
+  }
+
+  function callLocalModel(userText) {
+    var messages = [{ role: "system", content: SYSTEM_PROMPT }]
+      .concat(history.slice(-12))
+      .concat([{ role: "user", content: userText }]);
+
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, 30000);
+
+    return fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: messages,
+        stream: false,
+        think: false,
+        options: { num_predict: 220, temperature: 0.7 }
+      }),
+      signal: ctrl.signal
+    })
+      .then(function (res) {
+        clearTimeout(timer);
+        if (!res.ok) throw new Error("bad status " + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        var reply = data && data.message && data.message.content;
+        reply = (typeof reply === "string") ? reply.trim() : "";
+        if (!reply) throw new Error("empty reply");
+        return reply;
+      })
+      .catch(function (err) {
+        clearTimeout(timer);
+        throw err;
+      });
+  }
+
+  function respond(userText) {
+    showTyping(true);
+
+    var minDelay = new Promise(function (r) {
+      setTimeout(r, 650 + Math.random() * 500);
+    });
+
+    function finish(reply, mode) {
+      minDelay.then(function () {
+        showTyping(false);
+        appendMessage("bot", reply);
+        history.push({ role: "assistant", content: reply });
+        if (history.length > 24) history = history.slice(-24);
+        setMode(mode);
+        busy = false;
+        send.removeAttribute("disabled");
+        field.focus();
+      });
+    }
+
+    if (localAvailable) {
+      callLocalModel(userText)
+        .then(function (reply) { finish(reply, "local"); })
+        .catch(function () {
+          localAvailable = false; // stop hammering a dead endpoint this session
+          finish(pickFallback(), "memory");
+        });
+    } else {
+      finish(pickFallback(), "memory");
+    }
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (busy) return;
+    var text = field.value.trim();
+    if (!text) return;
+
+    busy = true;
+    send.setAttribute("disabled", "disabled");
+
+    appendMessage("user", text);
+    history.push({ role: "user", content: text });
+    field.value = "";
+
+    respond(text);
+  });
+})();
+
+(function () {
+  "use strict";
+
+  /* --- Waitlist signup (variant tag: minimumviablepet) --- */
+  var VARIANT = "minimumviablepet";
+  var IDLE_HELPER = 'No newsletter. No drip campaign. No "circling back."';
+  var COPY = {
+    ok: "201 Created. You're on the list — we'll email you exactly once, when it's your turn. Until then: go pet something.",
+    duplicate: "409 Conflict — you're already on the list. We like the enthusiasm.",
+    invalid: "That email won't compile. One more look?",
+    error: "That didn't go through — our end, not yours. Try again in a moment.",
+    offline: "Couldn't reach the server — our end, not yours. Try again in a moment."
+  };
+
+  Array.prototype.forEach.call(document.querySelectorAll("form[data-waitlist]"), function (form) {
+    var field = form.querySelector('input[type="email"]');
+    var button = form.querySelector('button[type="submit"]');
+    var msg = form.querySelector("[data-waitlist-msg]");
+    var buttonLabel = button.textContent;
+
+    function setState(state, text) {
+      msg.setAttribute("data-state", state);
+      msg.textContent = text;
+    }
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      button.disabled = true;
+      button.textContent = "POST /api/waitlist …";
+      setState("sending", "…");
+
+      function settle() {
+        button.textContent = buttonLabel;
+      }
+
+      fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: field.value.trim(), variant: VARIANT })
+      })
+        .then(function (res) {
+          return res.json().then(function (data) { return { status: res.status, data: data }; });
+        })
+        .then(function (r) {
+          settle();
+          if (r.status === 201) {
+            field.disabled = true;
+            setState("ok", COPY.ok);
+            return;
+          }
+          button.disabled = false;
+          if (r.status === 409) {
+            setState("duplicate", COPY.duplicate);
+            return;
+          }
+          if (r.data && r.data.error === "invalid_email") {
+            setState("error", COPY.invalid);
+            return;
+          }
+          setState("error", COPY.error);
+        })
+        .catch(function () {
+          settle();
+          button.disabled = false;
+          setState("error", COPY.offline);
+        });
+    });
+
+    field.addEventListener("input", function () {
+      if (msg.getAttribute("data-state") === "error") setState("idle", IDLE_HELPER);
+    });
+  });
+})();
+
+(function () {
+  "use strict";
+
+  /* --- FAQ: one open at a time --- */
+  var items = Array.prototype.slice.call(document.querySelectorAll(".mvp-faq__item"));
+  items.forEach(function (item) {
+    var summary = item.querySelector(".mvp-faq__q");
+    summary.addEventListener("click", function (e) {
+      e.preventDefault();
+      var isOpen = item.hasAttribute("open");
+      if (!isOpen) {
+        items.forEach(function (other) {
+          if (other !== item) other.removeAttribute("open");
+        });
+        item.setAttribute("open", "");
+      } else {
+        item.removeAttribute("open");
+      }
+    });
+  });
+})();
+
+(function () {
+  "use strict";
+
+  /* --- Footer year --- */
+  document.getElementById("mvp-year").textContent = String(new Date().getFullYear());
+})();
+</script>
+</body>
+</html>

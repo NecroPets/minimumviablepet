@@ -264,7 +264,9 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
 <script>
 "use strict";
 /* MinimumViablePet app — vanilla, no build step. State machine on
-   <body data-view>, one section per concern. */
+   <body data-view>. Routing is single-driver: everything navigates by
+   setting the hash; route() is the only function that opens views, and an
+   epoch counter discards every stale async continuation. */
 
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -285,14 +287,18 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
   const state = {
     engineUp: false,
     companions: [],
-    companion: null,        // full row from GET /api/companions/:id
-    conversationId: null,   // active conversation (interview or chat)
+    companion: null,        // full response from GET /api/companions/:id
+    conversationId: null,
     streaming: false,
-    ingesting: 0,           // artifacts still in flight
-    ingestReader: null,
-    abort: null,
+    abort: null,            // in-flight chat stream
+    ingesting: 0,           // artifacts still in flight for the open companion
+    ingestAbort: null,      // teardown for the ingest SSE follower
+    pendingFiles: null,     // files dropped before any companion existed
     artifactLines: new Map(),
   };
+
+  /* Every async view continuation checks its epoch; navigation bumps it. */
+  let epoch = 0;
 
   /* ---------- tiny SSE parser over fetch ---------- */
   async function* sseEvents(response) {
@@ -329,6 +335,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
     return body;
   });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   /* ---------- log rendering ---------- */
   function scrollPin() {
@@ -385,6 +392,42 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     }
   }
 
+  /* ---------- navigation (single driver) ---------- */
+  function navigate(companionId) {
+    const target = companionId ? "#/c/" + companionId : "#/";
+    if (location.hash === target) route(); // same-hash refresh (e.g. train done)
+    else location.hash = target;
+  }
+
+  async function route() {
+    const my = ++epoch;
+    // leaving a view always tears down its live work
+    state.abort?.abort();
+    state.abort = null;
+    state.streaming = false;
+    closeIngestStream();
+    state.ingesting = 0;
+    toggleDrawer(false);
+
+    const m = location.hash.match(/^#\/c\/(.+)$/);
+    if (!m) {
+      showEmpty();
+      return;
+    }
+    try {
+      await openCompanion(m[1], my);
+    } catch (err) {
+      if (my !== epoch) return;
+      clearLog();
+      setView("empty");
+      line(`✗ ${err.message}`, "warn");
+      line("that companion isn't on this machine anymore.", "dim");
+      await refreshCompanions().catch(() => {});
+      showEmptyContent();
+    }
+  }
+  window.addEventListener("hashchange", route);
+
   /* ---------- views ---------- */
   function setView(view) {
     els.body.setAttribute("data-view", view);
@@ -405,6 +448,10 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     els.progress.hidden = true;
     els.drawerBtn.hidden = true;
     clearLog();
+    showEmptyContent();
+  }
+
+  function showEmptyContent() {
     line("$ mvp list");
     line("no companions found.", "dim");
     line("");
@@ -418,13 +465,15 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
       '<div class="app-drop__or">— or —</div>' +
       '<form class="app-drop__name" id="app-name-form">' +
       '<input id="app-name-input" placeholder="just type their name…" aria-label="Pet name" maxlength="60">' +
-      '<button type="submit" class="mvp-btn">mvp init ⏎</button></form>';
+      '<button type="submit" class="mvp-btn">mvp init ⏎</button></form>' +
+      '<div class="app-line app-line--ok" id="app-pending-note" hidden></div>';
     els.log.appendChild(drop);
     line("");
     line("no forms. no account. onboarding is a conversation —", "dim");
     line('the first question is just "who were they?"', "dim");
     sincere("Take your time. Everything you add stays on this machine.");
     setInput(false, "create a companion first");
+    if (state.pendingFiles?.length) showPendingNote();
     drop.querySelector("#app-browse").addEventListener("click", () => els.fileInput.click());
     drop.querySelector("#app-name-form").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -434,7 +483,16 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     });
   }
 
-  async function createCompanion(name, pendingFiles) {
+  function showPendingNote() {
+    const note = $("app-pending-note");
+    if (!note) return;
+    note.hidden = false;
+    note.textContent = `✓ holding ${state.pendingFiles.length} file${state.pendingFiles.length === 1 ? "" : "s"} — give them a name and I'll take everything in.`;
+    const input = $("app-name-input");
+    if (input) input.focus();
+  }
+
+  async function createCompanion(name) {
     try {
       const res = await api("/api/companions", {
         method: "POST",
@@ -442,9 +500,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
         body: JSON.stringify(name ? { name } : {}),
       });
       await refreshCompanions();
-      location.hash = "#/c/" + res.companion.id;
-      await openCompanion(res.companion.id);
-      if (pendingFiles && pendingFiles.length) await uploadFiles(pendingFiles);
+      navigate(res.companion.id);
     } catch (err) {
       line(`✗ ${err.message}`, "warn");
     }
@@ -467,14 +523,14 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     els.switcher.appendChild(plus);
   }
 
-  async function openCompanion(id) {
+  async function openCompanion(id, my) {
     const res = await api(`/api/companions/${id}`);
+    if (my !== epoch) return;
     state.companion = res;
     els.switcher.value = id;
     els.drawerBtn.hidden = false;
     clearLog();
-    closeIngestStream();
-    followIngest(id);
+    followIngest(id, my);
 
     const c = res.companion;
     const name = c.name || "them";
@@ -483,8 +539,10 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
       els.title.textContent = `${name.toLowerCase()}@localhost:~`;
       els.phase.textContent = "";
       els.progress.hidden = true;
-      await showAwakeMeta(id);
-      await openChatConversation(id);
+      await showAwakeMeta(id, my);
+      if (my !== epoch) return;
+      await openChatConversation(id, my);
+      if (my !== epoch) return;
       setInput(true, `say something to ${name.toLowerCase()}…`);
     } else {
       setView("interview");
@@ -494,19 +552,27 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
       updateProgressRule(res.progress);
       state.conversationId = res.interview_conversation_id;
       const msgs = await api(`/api/conversations/${state.conversationId}/messages?limit=50`);
+      if (my !== epoch) return;
       if (msgs.messages.length === 0) {
         setInput(false);
         await streamTurn({ begin: true });
       } else {
         for (const m of msgs.messages) bubble(m.role === "user" ? "user" : "bot", m.content);
       }
+      if (my !== epoch) return;
       setInput(true, "answer in your own words — or drop files in anytime");
     }
     els.field.focus();
+    if (state.pendingFiles?.length) {
+      const files = state.pendingFiles;
+      state.pendingFiles = null;
+      await uploadFiles(files);
+    }
   }
 
-  async function showAwakeMeta(id) {
+  async function showAwakeMeta(id, my) {
     const profile = (await api(`/api/companions/${id}/profile`)).profile;
+    if (my !== epoch) return;
     const bits = [
       [profile.pet.color, profile.pet.breed, profile.pet.species].filter(Boolean).join(" "),
       profile.pet.age_at_passing && `${profile.pet.age_at_passing}`,
@@ -516,12 +582,14 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     els.meta.textContent = bits.join(" · ");
   }
 
-  async function openChatConversation(id) {
+  async function openChatConversation(id, my) {
     const res = await api(`/api/companions/${id}/conversations`);
+    if (my !== epoch) return;
     const chat = res.conversations.filter((c) => c.kind === "chat").pop();
     if (chat) {
       state.conversationId = chat.id;
       const msgs = await api(`/api/conversations/${chat.id}/messages?limit=50`);
+      if (my !== epoch) return;
       for (const m of msgs.messages) bubble(m.role === "user" ? "user" : "bot", m.content);
       if (msgs.messages.length > 0) return;
     } else {
@@ -530,6 +598,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ companion_id: id }),
       });
+      if (my !== epoch) return;
       state.conversationId = created.conversation.id;
     }
     await streamTurn({ begin: true });
@@ -546,6 +615,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
   /* ---------- chat streaming ---------- */
   async function streamTurn({ message, begin }) {
     if (state.streaming || !state.conversationId) return;
+    const my = epoch;
     state.streaming = true;
     setInput(false);
     els.typing.classList.add("is-on");
@@ -568,6 +638,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
         throw new Error(body.error || `HTTP ${res.status}`);
       }
       for await (const { event, data } of sseEvents(res)) {
+        if (my !== epoch) { ctrl.abort(); break; }
         if (event === "delta") {
           if (!botBubble) {
             els.typing.classList.remove("is-on");
@@ -580,7 +651,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
           if (data.memory && data.memory.new_facts > 0) {
             const note = document.createElement("div");
             note.className = "app-memnote";
-            note.textContent = "▸ written to memory · localhost · permanent";
+            note.textContent = "▸ written to memory · localhost";
             els.log.appendChild(note);
             scrollPin();
           }
@@ -601,19 +672,21 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
       }
     } catch (err) {
       if (ctrl.signal.aborted) {
-        if (botBubble) botBubble.textContent += " · interrupted";
-      } else {
+        if (botBubble && my === epoch) botBubble.textContent += " · interrupted";
+      } else if (my === epoch) {
         line(`✗ ${err.message}`, "warn");
         line("the model is offline or struggling. everything you said is on disk — try again when it's back.", "dim");
       }
     } finally {
-      state.streaming = false;
-      state.abort = null;
-      els.typing.classList.remove("is-on");
-      els.stop.hidden = true;
-      setInput(true);
-      els.field.focus();
-      pollEngine();
+      if (state.abort === ctrl) state.abort = null;
+      if (my === epoch) {
+        state.streaming = false;
+        els.typing.classList.remove("is-on");
+        els.stop.hidden = true;
+        setInput(true);
+        els.field.focus();
+        pollEngine();
+      }
     }
   }
 
@@ -638,33 +711,64 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
 
   /* ---------- ingest ---------- */
   function closeIngestStream() {
-    state.ingestReader?.cancel?.();
-    state.ingestReader = null;
+    state.ingestAbort?.abort();
+    state.ingestAbort = null;
   }
-  async function followIngest(companionId) {
-    try {
-      const res = await fetch(`/api/companions/${companionId}/ingest/events`);
-      state.ingestReader = res.body.getReader ? res : null;
-      for await (const { event, data } of sseEvents(res)) {
-        if (state.companion?.companion.id !== companionId) return;
-        if (event === "artifact") renderArtifactEvent(data);
-        else if (event === "stalled") line(`→ paused: ollama unreachable — retrying in ${data.retry_in_s}s`, "warn");
-        else if (event === "idle") {
-          if (state.ingesting > 0) {
-            state.ingesting = 0;
-            const c = data.counts;
-            line(`✓ ingest done · ${c.processed} processed${c.failed ? ` · ${c.failed} failed (kept, loudly)` : ""}`, "ok");
-            setInput(true);
-            refreshDrawerIfOpen();
-          }
-        } else if (event === "train" && data.phase === "done") {
-          refreshDrawerIfOpen();
+
+  /** Follow ingest events for as long as this companion is open. Stream loss
+   * (server restart, network hiccup) resyncs from the artifacts endpoint and
+   * reconnects with a short backoff — the input can never stay locked on a
+   * dead stream. */
+  async function followIngest(companionId, my) {
+    while (my === epoch) {
+      const ctrl = new AbortController();
+      state.ingestAbort = ctrl;
+      let sawEvent = false;
+      try {
+        const res = await fetch(`/api/companions/${companionId}/ingest/events`, { signal: ctrl.signal });
+        for await (const { event, data } of sseEvents(res)) {
+          if (my !== epoch) return;
+          sawEvent = true;
+          if (event === "artifact") renderArtifactEvent(data);
+          else if (event === "stalled") line(`→ paused: ollama unreachable — retrying in ${data.retry_in_s}s`, "warn");
+          else if (event === "idle") finishIngest(data.counts);
+          else if (event === "train" && data.phase === "done") refreshDrawerIfOpen();
         }
+      } catch {
+        if (ctrl.signal.aborted) return;
       }
-    } catch {
-      /* stream ends when the tab or companion changes; poller owns status */
+      if (my !== epoch) return;
+      if (state.ingesting > 0 && sawEvent) line("→ progress stream lost — resyncing…", "dim");
+      await resyncArtifacts(companionId, my);
+      await sleep(3000);
     }
   }
+
+  async function resyncArtifacts(companionId, my) {
+    try {
+      const res = await api(`/api/companions/${companionId}/artifacts`);
+      if (my !== epoch) return;
+      for (const a of res.artifacts) {
+        if (state.artifactLines.has(a.id)) {
+          renderArtifactEvent({ ...a, detail: null, progress: null, step: a.status === "processing" ? "working" : null });
+        }
+      }
+      if (state.ingesting > 0 && res.counts.uploaded === 0 && res.counts.processing === 0) {
+        finishIngest(res.counts);
+      }
+    } catch {
+      /* engine unreachable — the status poller owns the pill; retry loop continues */
+    }
+  }
+
+  function finishIngest(counts) {
+    if (state.ingesting === 0) return;
+    state.ingesting = 0;
+    line(`✓ ingest done · ${counts.processed} processed${counts.failed ? ` · ${counts.failed} failed (kept, loudly)` : ""}`, "ok");
+    setInput(true);
+    refreshDrawerIfOpen();
+  }
+
   function renderArtifactEvent(a) {
     let el = state.artifactLines.get(a.id);
     if (!el) {
@@ -687,37 +791,33 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
 
   async function uploadFiles(files) {
     if (!state.companion) {
-      // photo-first path: no companion yet — ask for a name inline, keep files
-      const name = prompt("what should i call them? their real name is fine.");
-      if (name === null) return;
-      await createCompanion(name.trim(), files);
+      // photo-first path: hold the files, ask for a name inline — no dialogs
+      state.pendingFiles = files;
+      showPendingNote();
       return;
     }
     const id = state.companion.companion.id;
-    state.ingesting += files.length;
     line(`$ mvp ingest ${files.length} file${files.length === 1 ? "" : "s"}`);
     line("→ localhost only. nothing leaves this machine.", "dim");
-    setInput(false, "ingesting — you can keep this tab open or come back");
     const form = new FormData();
     for (const f of files) form.append("files", f, f.name);
     try {
       const res = await fetch(`/api/companions/${id}/artifacts`, { method: "POST", body: form });
       const body = await res.json();
+      let accepted = 0;
       for (const r of body.results ?? []) {
         if (!r.ok) line(`✗ ${r.file} — ${r.error}${r.limit_mb ? ` (limit ${r.limit_mb}MB)` : ""}`, "warn");
-        else if (r.duplicate && !r.retried) {
-          line(`✓ ${r.artifact.original_name} — already known`, "ok");
-          state.ingesting -= 1;
-        }
+        else if (r.duplicate && !r.retried) line(`✓ ${r.artifact.original_name} — already known`, "ok");
+        else accepted += 1;
       }
       if (body.error) throw new Error(body.error);
-      const accepted = (body.results ?? []).filter((r) => r.ok && (!r.duplicate || r.retried)).length;
-      state.ingesting = accepted;
-      if (accepted === 0) setInput(true);
+      state.ingesting += accepted;
+      if (state.ingesting > 0) {
+        setInput(false, "ingesting — you can keep this tab open or come back");
+      }
     } catch (err) {
       line(`✗ upload failed: ${err.message}`, "warn");
-      state.ingesting = 0;
-      setInput(true);
+      if (state.ingesting === 0) setInput(true);
     }
   }
 
@@ -753,12 +853,15 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
   els.scrim.addEventListener("click", () => toggleDrawer(false));
   function refreshDrawerIfOpen() {
     if (!els.drawer.hidden) renderDrawer();
-    if (state.companion) api(`/api/companions/${state.companion.companion.id}`).then((res) => {
+    if (!state.companion) return;
+    const id = state.companion.companion.id;
+    api(`/api/companions/${id}`).then((res) => {
+      if (state.companion?.companion.id !== id) return;
       const wasInterviewing = state.companion.companion.state === "interviewing";
       state.companion = res;
       if (res.companion.state === "interviewing") updateProgressRule(res.progress);
-      else if (wasInterviewing) openCompanion(res.companion.id);
-    });
+      else if (wasInterviewing) navigate(id); // same-hash refresh reloads the view awake
+    }).catch(() => {});
   }
   async function renderDrawer() {
     const id = state.companion.companion.id;
@@ -802,7 +905,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     els.trainBtn.disabled = true;
     try {
       const res = await fetch(`/api/companions/${id}/train`, { method: "POST" });
-      if (!res.ok) {
+      if (!res.headers.get("content-type")?.includes("event-stream")) {
         const body = await res.json();
         if (body.error === "quality_bar") {
           els.trainLog.textContent += `✗ build refused — still missing: ${body.missing.join("; ")}\n`;
@@ -819,11 +922,11 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
         else if (event === "progress") els.trainLog.textContent += `  embedding ${data.done}/${data.total}\n`;
         else if (event === "done") {
           els.trainLog.textContent += `✓ persona build passing · ${data.chunks_total} memories indexed (${data.chunks_embedded} newly embedded)\n`;
-          toggleDrawer(false);
           await refreshCompanions();
           line("");
           line(`── persona build passing · ${state.companion.companion.name || "they"} are awake ──`, "divider");
-          await openCompanion(id);
+          toggleDrawer(false);
+          navigate(id); // single driver: same-hash refresh opens the awake view
         } else if (event === "error") {
           els.trainLog.textContent += `✗ ${data.message}\n`;
         }
@@ -836,19 +939,10 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     }
   });
 
-  /* ---------- switcher + router ---------- */
+  /* ---------- switcher ---------- */
   els.switcher.addEventListener("change", () => {
-    if (els.switcher.value === "__new__") {
-      location.hash = "";
-      showEmpty();
-    } else {
-      location.hash = "#/c/" + els.switcher.value;
-      openCompanion(els.switcher.value);
-    }
-  });
-  window.addEventListener("hashchange", () => {
-    const m = location.hash.match(/^#\/c\/(.+)$/);
-    if (m && state.companion?.companion.id !== m[1]) openCompanion(m[1]);
+    if (els.switcher.value === "__new__") navigate(null);
+    else navigate(els.switcher.value);
   });
 
   /* ---------- boot ---------- */
@@ -859,14 +953,15 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
       await refreshCompanions();
     } catch (err) {
       clearLog();
+      setView("empty");
       line("✗ can't reach the engine on this machine.", "warn");
       line("  if you're reading this on the public site: this app runs locally.", "dim");
       line("  git clone https://github.com/NecroPets/minimumviablepet && bun run start", "dim");
       return;
     }
     const m = location.hash.match(/^#\/c\/(.+)$/);
-    if (m && state.companions.some((c) => c.id === m[1])) await openCompanion(m[1]);
-    else if (state.companions.length > 0) await openCompanion(state.companions[0].id);
+    if (m && state.companions.some((c) => c.id === m[1])) route();
+    else if (state.companions.length > 0) navigate(state.companions[0].id);
     else showEmpty();
   })();
 })();

@@ -129,6 +129,47 @@ def test_interview_begin_speaks_first(server, ollama_up):
     assert [r[0] for r in rows] == ["assistant"], "only the interviewer's opener is persisted"
 
 
+def test_mid_stream_abort_persists_partial(server, ollama_up):
+    """Closing the connection mid-generation must keep the half-sentence —
+    it's the owner's data — marked aborted:true."""
+    if not ollama_up:
+        pytest.skip("live chat model required")
+    cid = create_companion(server)
+    awaken(server, cid)
+    _, body = post_json(server, "/api/conversations", {"companion_id": cid})
+    conv = body["conversation"]["id"]
+
+    reader = sse_post(server, "/api/chat", {
+        "conversation_id": conv,
+        "message": "Tell me a long story about your day, every detail.",
+    })
+    saw_delta = False
+    for event, data in reader.events(max_events=2000):
+        if event == "delta" and data["text"].strip():
+            saw_delta = True
+            break
+    assert saw_delta
+    reader.close()  # abort mid-stream
+
+    import time
+
+    deadline = time.time() + 30
+    row = None
+    while time.time() < deadline:
+        con = sqlite3.connect(server.mvp_db_path)
+        row = con.execute(
+            "SELECT content, meta_json FROM messages WHERE role='assistant' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        con.close()
+        if row is not None:
+            break
+        time.sleep(0.5)
+    assert row is not None, "partial assistant reply must be persisted after abort"
+    content, meta_json = row
+    assert len(content) > 0
+    assert json.loads(meta_json).get("aborted") is True
+
+
 def test_chat_validation(server):
     status, body = post_json(server, "/api/chat", {"conversation_id": "nope", "message": "hi"})
     assert (status, body["error"]) == (404, "conversation_not_found")

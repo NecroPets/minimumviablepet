@@ -158,6 +158,64 @@ def test_awake_companion_loads_awake_view(server, page_factory, upload, artifact
     page.screenshot(path=str(SHOTS / "app_awake.png"))
 
 
+def test_switcher_new_companion_shows_empty_state(server, page_factory):
+    create_companion(server, name="Kernel")
+    page = page_factory()
+    page.goto(app_url(server), wait_until="load", timeout=30000)
+    wait_view(page, "interview")
+    page.locator("#app-switcher").select_option(value="__new__")
+    wait_view(page, "empty")
+    assert "this machine has room for someone" in page.locator("#app-log").inner_text()
+    assert page.locator(".app-drop").count() == 1
+
+
+def test_unknown_hash_is_graceful(server, page_factory):
+    create_companion(server, name="Kernel")
+    page = page_factory()
+    page.goto(app_url(server), wait_until="load", timeout=30000)
+    wait_view(page, "interview")
+    page.evaluate("() => { location.hash = '#/c/ghost-id-that-does-not-exist'; }")
+    page.wait_for_function(
+        "() => document.body.getAttribute('data-view') === 'empty'", timeout=10000
+    )
+    log = page.locator("#app-log").inner_text()
+    assert "companion_not_found" in log or "isn't on this machine" in log
+    assert page.collected_errors["page"] == [], "no uncaught rejections"
+
+
+def test_ui_ingest_surface_live(server, page_factory, tmp_path, ollama_embed_up):
+    """The whole UI ingest path: file input -> progress line -> ✓ -> idle
+    summary -> input re-enabled."""
+    if not ollama_embed_up:
+        pytest.skip("embed model required")
+    story = tmp_path / "box.md"
+    story.write_text(
+        "# The Box\n\nHe fell asleep inside a shipping box marked fragile and "
+        "lived there for a week, emerging only for meals and judgment."
+    )
+    page = page_factory()
+    page.goto(app_url(server), wait_until="load", timeout=30000)
+    wait_view(page, "empty")
+    page.locator("#app-name-input").fill("Kernel")
+    page.locator("#app-name-form button[type=submit]").click()
+    wait_view(page, "interview")
+
+    page.locator("#app-file-input").set_input_files(str(story))
+    page.wait_for_function(
+        "() => document.getElementById('app-log').textContent.includes('✓ box.md')",
+        timeout=240000,
+    )
+    page.wait_for_function(
+        "() => document.getElementById('app-log').textContent.includes('ingest done')",
+        timeout=60000,
+    )
+    assert not page.locator("#app-field").is_disabled(), "input re-enables after idle"
+    con = sqlite3.connect(server.mvp_db_path)
+    n = con.execute("SELECT COUNT(*) FROM chunks WHERE source='story'").fetchone()[0]
+    con.close()
+    assert n >= 1
+
+
 def test_offline_posture_when_server_dies(server, page_factory):
     cid = create_companion(server, name="Kernel")
     awaken(server, cid)

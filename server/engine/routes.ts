@@ -9,6 +9,7 @@ import { sha256Hex } from "./text.ts";
 import { IngestQueue, type ArtifactRow, type Processor } from "./ingest/queue.ts";
 import { processText } from "./ingest/processors/text.ts";
 import { sniff, type ArtifactKind } from "./ingest/sniff.ts";
+import { streamChat, type ConversationRow } from "./chat.ts";
 
 function json(status: number, body: unknown, extraHeaders?: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
@@ -275,8 +276,95 @@ export function createEngineRoutes(): EngineRouter {
     return json(200, { ok: true });
   }
 
+  const getConversation = db.query<ConversationRow & { created_at: string }, [string]>(
+    "SELECT * FROM conversations WHERE id = ?",
+  );
+  const listConversations = db.query<
+    { id: string; kind: string; created_at: string; last_message_at: string | null },
+    [string]
+  >(
+    `SELECT c.id, c.kind, c.created_at,
+            (SELECT MAX(m.created_at) FROM messages m WHERE m.conversation_id = c.id) AS last_message_at
+     FROM conversations c WHERE c.companion_id = ? ORDER BY c.created_at`,
+  );
+
+  async function handleChat(req: Request): Promise<Response> {
+    const body = await readJsonBody(req);
+    if (body instanceof Response) return body;
+    const conversationId = typeof body.conversation_id === "string" ? body.conversation_id : "";
+    const conversation = getConversation.get(conversationId);
+    if (!conversation) return json(404, { ok: false, error: "conversation_not_found" });
+    const row = getCompanion.get(conversation.companion_id)!;
+
+    const begin = body.begin === true;
+    const message = typeof body.message === "string" ? body.message.trim() : "";
+    if (!begin && message === "") return json(400, { ok: false, error: "missing_message" });
+    if (message.length > 8000) return json(400, { ok: false, error: "message_too_long" });
+
+    return streamChat({
+      db,
+      conversation,
+      companion: row,
+      counts: artifactCounts.get(row.id, row.id, row.id)!,
+      message: begin ? null : message,
+      requestSignal: req.signal,
+    });
+  }
+
+  async function handleNewConversation(req: Request): Promise<Response> {
+    const body = await readJsonBody(req);
+    if (body instanceof Response) return body;
+    const companionId = typeof body.companion_id === "string" ? body.companion_id : "";
+    const row = getCompanion.get(companionId);
+    if (!row) return json(404, { ok: false, error: "companion_not_found" });
+    if (row.state !== "awake") return json(409, { ok: false, error: "not_awake" });
+    const id = crypto.randomUUID();
+    insertConversation.run(id, row.id, "chat");
+    return json(201, { ok: true, conversation: { id, companion_id: row.id, kind: "chat" } });
+  }
+
+  function handleMessages(conversationId: string, url: URL): Response {
+    const conversation = getConversation.get(conversationId);
+    if (!conversation) return json(404, { ok: false, error: "conversation_not_found" });
+    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit") ?? 50)));
+    const before = Number(url.searchParams.get("before") ?? 0);
+    const rows = before > 0
+      ? db.query(
+          `SELECT id, role, content, created_at FROM (
+             SELECT id, role, content, created_at FROM messages
+             WHERE conversation_id = ? AND id < ? ORDER BY id DESC LIMIT ?
+           ) ORDER BY id`,
+        ).all(conversationId, before, limit)
+      : db.query(
+          `SELECT id, role, content, created_at FROM (
+             SELECT id, role, content, created_at FROM messages
+             WHERE conversation_id = ? ORDER BY id DESC LIMIT ?
+           ) ORDER BY id`,
+        ).all(conversationId, limit);
+    return json(200, { ok: true, messages: rows });
+  }
+
   return {
     async handle(req: Request, pathname: string): Promise<Response | null> {
+      if (pathname === "/api/chat") {
+        if (req.method !== "POST") {
+          return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "POST" });
+        }
+        return handleChat(req);
+      }
+
+      if (pathname === "/api/conversations") {
+        if (req.method !== "POST") {
+          return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "POST" });
+        }
+        return handleNewConversation(req);
+      }
+
+      const convMatch = pathname.match(/^\/api\/conversations\/([^/]+)\/messages$/);
+      if (convMatch && req.method === "GET") {
+        return handleMessages(convMatch[1], new URL(req.url));
+      }
+
       if (pathname === "/api/app/health") {
         if (req.method !== "GET") {
           return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "GET" });
@@ -321,6 +409,9 @@ export function createEngineRoutes(): EngineRouter {
             event: "snapshot",
             data: queue.snapshotFor(row.id),
           }));
+        }
+        if (rest === "/conversations" && req.method === "GET") {
+          return json(200, { ok: true, conversations: listConversations.all(row.id) });
         }
       }
 

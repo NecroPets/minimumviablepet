@@ -176,7 +176,9 @@ def ollama_up():
         headers={"Content-Type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=180) as r:
+        # once per session; must survive a cold 31GB load queued behind
+        # whatever another agent has pinned in unified memory
+        with urllib.request.urlopen(req, timeout=480) as r:
             return r.status == 200
     except (urllib.error.URLError, ConnectionError, OSError):
         return False
@@ -195,7 +197,7 @@ def ollama_embed_up():
         headers={"Content-Type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=180) as r:
+        with urllib.request.urlopen(req, timeout=480) as r:
             return r.status == 200
     except (urllib.error.URLError, ConnectionError, OSError):
         return False

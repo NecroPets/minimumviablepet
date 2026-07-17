@@ -112,6 +112,10 @@ if (!MVP_PUBLIC) {
 const server = Bun.serve({
   port: PORT,
   hostname: MVP_PUBLIC ? "0.0.0.0" : "127.0.0.1",
+  // SSE streams idle between model tokens; heartbeat pings arrive every
+  // 15-25s, so anything comfortably above that keeps them alive. Bun's
+  // default of 10s kills a chat stream before a cold model's first token.
+  idleTimeout: 120,
   maxRequestBodySize: MVP_PUBLIC
     ? 4 * 1024 * 1024
     : (Number(process.env.MVP_MAX_UPLOAD_MB || 200) + 8) * 1024 * 1024,

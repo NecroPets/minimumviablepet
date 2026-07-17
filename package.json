@@ -1,0 +1,9 @@
+{
+  "name": "necropets-ab",
+  "private": true,
+  "scripts": {
+    "start": "bun server/server.ts",
+    "dev": "PORT=8091 bun --watch server/server.ts",
+    "test": "uv run --with pytest --with playwright pytest tests/ -v"
+  }
+}

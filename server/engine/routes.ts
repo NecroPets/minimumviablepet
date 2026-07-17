@@ -175,7 +175,8 @@ export function createEngineRoutes(): EngineRouter {
   );
   const insertArtifact = db.prepare(
     `INSERT INTO artifacts (id, companion_id, kind, original_name, stored_path, mime, bytes, hash)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (companion_id, hash) DO NOTHING`,
   );
 
   function publicArtifact(a: ArtifactRow) {
@@ -221,7 +222,12 @@ export function createEngineRoutes(): EngineRouter {
     const storedPath = join(dir, `${hash}.${sniffed.ext}`);
     await Bun.write(storedPath, bytes);
     const id = crypto.randomUUID();
-    insertArtifact.run(id, row.id, sniffed.kind, filename, storedPath, sniffed.mime, bytes.length, hash);
+    // the await above is a real yield point — a concurrent identical upload
+    // may have inserted first; ON CONFLICT + refetch makes both requests win
+    const res = insertArtifact.run(id, row.id, sniffed.kind, filename, storedPath, sniffed.mime, bytes.length, hash);
+    if (Number(res.changes) === 0) {
+      return { ok: true, duplicate: true, artifact: publicArtifact(getArtifactByHash.get(row.id, hash)!) };
+    }
     return { ok: true, duplicate: false, artifact: publicArtifact(getArtifactById.get(id)!) };
   }
 

@@ -225,6 +225,37 @@ class TestTextProcessor:
                 assert json.loads(e.read())["error"] == expected
 
 
+class TestConcurrency:
+    def test_identical_bytes_racing_yield_one_artifact_no_500(self, server, upload):
+        """The check-then-insert spans an await; ON CONFLICT + refetch must make
+        both racing requests succeed with exactly one row."""
+        import threading
+
+        cid = create_companion(server)
+        url = f"{server.base_url}/api/companions/{cid}/artifacts"
+        payload = ("race.md", ("race payload " * 10).encode())
+        results = []
+
+        def go():
+            results.append(upload(url, [payload]))
+
+        threads = [threading.Thread(target=go) for _ in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert all(status == 201 for status, _ in results), results
+        oks = [body["results"][0] for _, body in results]
+        assert all(r["ok"] for r in oks)
+        assert sum(1 for r in oks if not r["duplicate"]) == 1, "exactly one non-duplicate winner"
+
+        con = sqlite3.connect(server.mvp_db_path)
+        n = con.execute("SELECT COUNT(*) FROM artifacts").fetchone()[0]
+        con.close()
+        assert n == 1
+
+
 class TestSSE:
     def test_event_ordering(self, server, upload, sse_reader, ollama_embed_up):
         if not ollama_embed_up:

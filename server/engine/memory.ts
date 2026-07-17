@@ -68,34 +68,47 @@ export async function runFactExtraction(
     format: FACTS_SCHEMA as unknown as object,
   });
 
-  const kept: { id: string; text: string }[] = [];
-  const insert = db.prepare(
-    `INSERT OR IGNORE INTO facts (id, companion_id, text, category, confidence, source_message_id)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+  // gate + dedupe IN MEMORY first, embed second, persist last — an embed
+  // failure must leave zero rows behind (a fact without a chunk would be a
+  // permanent ghost: unretrievable, and the UNIQUE dedupe would block it
+  // from ever being re-learned)
+  const existing = new Set(
+    db.query<{ text: string }, [string]>("SELECT text FROM facts WHERE companion_id = ?")
+      .all(companionId)
+      .map((r) => r.text),
   );
+  const fresh: FactCandidate[] = [];
   for (const fact of facts) {
     if (typeof fact.text !== "string" || fact.text.trim().length < 8) continue;
     if (typeof fact.confidence !== "number" || fact.confidence < config.factConfidence) continue;
-    const id = crypto.randomUUID();
-    const res = insert.run(id, companionId, fact.text.trim(), fact.category, fact.confidence, userMessageId);
-    if (res.changes > 0) kept.push({ id, text: fact.text.trim() });
+    const text = fact.text.trim();
+    if (existing.has(text) || fresh.some((f) => f.text === text)) continue;
+    fresh.push({ ...fact, text });
   }
+  if (fresh.length === 0) return { new_facts: 0 };
 
-  if (kept.length > 0) {
-    const vecs = await embedTexts(db, kept.map((k) => k.text), client);
-    const insertChunk = db.prepare(
-      `INSERT INTO chunks (companion_id, source, source_key, seq, text, hash, model, embedding, embedded_at, meta_json)
-       VALUES (?, 'fact', ?, 0, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), '{}')`,
-    );
-    db.transaction(() => {
-      kept.forEach((k, i) => {
-        insertChunk.run(companionId, `fact:${k.id}`, k.text, sha256Hex(k.text), config.embedModel, vecToBlob(vecs[i]));
-      });
-    })();
-    applyFactCap(db, companionId);
-  }
+  const vecs = await embedTexts(db, fresh.map((f) => f.text), client);
 
-  return { new_facts: kept.length };
+  const insertFact = db.prepare(
+    `INSERT OR IGNORE INTO facts (id, companion_id, text, category, confidence, source_message_id)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  );
+  const insertChunk = db.prepare(
+    `INSERT INTO chunks (companion_id, source, source_key, seq, text, hash, model, embedding, embedded_at, meta_json)
+     VALUES (?, 'fact', ?, 0, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), '{}')`,
+  );
+  let inserted = 0;
+  db.transaction(() => {
+    fresh.forEach((fact, i) => {
+      const id = crypto.randomUUID();
+      const res = insertFact.run(id, companionId, fact.text, fact.category, fact.confidence, userMessageId);
+      if (Number(res.changes) === 0) return; // raced an identical fact
+      insertChunk.run(companionId, `fact:${id}`, fact.text, sha256Hex(fact.text), config.embedModel, vecToBlob(vecs[i]));
+      inserted += 1;
+    });
+  })();
+  if (inserted > 0) applyFactCap(db, companionId);
+  return { new_facts: inserted };
 }
 
 /** Enforce the fact cap: evict lowest-confidence-then-oldest, and remove the

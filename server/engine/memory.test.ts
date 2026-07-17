@@ -82,6 +82,39 @@ describe("runFactExtraction", () => {
     expect(out.new_facts).toBe(0);
     expect(db.query<{ n: number }, []>("SELECT COUNT(*) n FROM chunks").get()!.n).toBe(0);
   });
+
+  test("REGRESSION: an embed failure leaves zero rows — no permanent ghost facts", async () => {
+    const db = setup();
+    const broken = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        if (new URL(req.url).pathname === "/api/embed") {
+          return new Response("embedder exploded", { status: 500 });
+        }
+        return Response.json({
+          message: {
+            content: JSON.stringify({
+              facts: [{ text: "He hated the vacuum with a fiery passion", category: "preference", confidence: 0.9 }],
+            }),
+          },
+        });
+      },
+    });
+    fixtures.push(broken);
+    const client = new OllamaClient(`http://127.0.0.1:${broken.port}`, {
+      chat: "fake", vision: "fake", embed: config.embedModel,
+    });
+    await expect(runFactExtraction(db, "c1", null, "vacuum", "noted", client)).rejects.toThrow(/500/);
+    expect(db.query<{ n: number }, []>("SELECT COUNT(*) n FROM facts").get()!.n).toBe(0);
+    expect(db.query<{ n: number }, []>("SELECT COUNT(*) n FROM chunks").get()!.n).toBe(0);
+
+    // and the same fact can still be learned once the embedder is back
+    const healthy = fakeOllama([
+      { text: "He hated the vacuum with a fiery passion", category: "preference", confidence: 0.9 },
+    ]);
+    const out = await runFactExtraction(db, "c1", null, "vacuum", "noted", healthy);
+    expect(out.new_facts).toBe(1);
+  });
 });
 
 describe("applyFactCap", () => {

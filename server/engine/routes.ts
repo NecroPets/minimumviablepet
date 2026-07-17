@@ -7,7 +7,11 @@ import { parseProfile, readiness, type Readiness } from "./profile.ts";
 import { Broadcaster } from "./sse.ts";
 import { sha256Hex } from "./text.ts";
 import { IngestQueue, type ArtifactRow, type Processor } from "./ingest/queue.ts";
+import { processAudio } from "./ingest/processors/audio.ts";
+import { processImage } from "./ingest/processors/image.ts";
+import { processPdf } from "./ingest/processors/pdf.ts";
 import { processText } from "./ingest/processors/text.ts";
+import { processVideo } from "./ingest/processors/video.ts";
 import { sniff, type ArtifactKind } from "./ingest/sniff.ts";
 import { streamChat, type ConversationRow } from "./chat.ts";
 import { runInterviewExtraction } from "./interview.ts";
@@ -35,8 +39,12 @@ interface CompanionRow {
   trained_at: string | null;
 }
 
-const PROCESSORS: Partial<Record<ArtifactKind, Processor>> = {
+const PROCESSORS: Record<ArtifactKind, Processor> = {
   text: processText,
+  image: processImage,
+  audio: processAudio,
+  video: processVideo,
+  pdf: processPdf,
 };
 
 async function ollamaReachable(): Promise<boolean> {

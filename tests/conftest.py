@@ -203,6 +203,90 @@ def ollama_embed_up():
         return False
 
 
+@pytest.fixture(scope="session")
+def ollama_vision_up():
+    """True when the vision model answers over a real (tiny) image."""
+    onepx = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
+    )
+    payload = json.dumps(
+        {
+            "model": os.environ.get("MVP_VISION_MODEL", "qwen3-vl:8b"),
+            "messages": [{"role": "user", "content": "one word: what color?", "images": [onepx]}],
+            "stream": False,
+            "options": {"num_predict": 3},
+        }
+    ).encode()
+    req = urllib.request.Request(
+        OLLAMA_BASE + "/api/chat", data=payload, headers={"Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=480) as r:
+            return r.status == 200
+    except (urllib.error.URLError, ConnectionError, OSError):
+        return False
+
+
+@pytest.fixture(scope="session")
+def whisper_up():
+    import shutil
+
+    return shutil.which(os.environ.get("MVP_WHISPER_BIN", "mlx_whisper")) is not None
+
+
+def build_min_pdf(lines):
+    """A structurally valid single-page PDF with a real text layer, built
+    byte-by-byte with a correct xref so pdftotext extracts it."""
+    content = "BT /F1 12 Tf 72 720 Td " + " 0 -20 Td ".join(f"({line}) Tj" for line in lines) + " ET"
+    objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+        "/Resources << /Font << /F1 5 0 R >> >> >>",
+        f"<< /Length {len(content)} >>\nstream\n{content}\nendstream",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out = b"%PDF-1.4\n"
+    offsets = []
+    for i, obj in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n{obj}\nendobj\n".encode()
+    xref_at = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode()
+    for off in offsets:
+        out += f"{off:010d} 00000 n \n".encode()
+    out += (
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n"
+    ).encode()
+    return out
+
+
+@pytest.fixture(scope="session")
+def media_fixtures(tmp_path_factory):
+    """Machine-generated real media files — nothing binary is checked in."""
+    d = tmp_path_factory.mktemp("media")
+    run = lambda cmd: subprocess.run(cmd, check=True, capture_output=True)
+    run(["say", "-o", str(d / "speech.aiff"),
+         "Oni loved chasing the red laser dot every single morning"])
+    run(["ffmpeg", "-v", "error", "-y", "-i", str(d / "speech.aiff"),
+         "-ac", "1", "-ar", "16000", str(d / "speech.wav")])
+    run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+         str(d / "sine.wav")])
+    run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=orange:s=256x256:d=1",
+         "-frames:v", "1", str(d / "square.png")])
+    run(["ffmpeg", "-v", "error", "-y",
+         "-f", "lavfi", "-i", "testsrc=duration=4:size=320x240:rate=10",
+         "-f", "lavfi", "-i", "sine=frequency=440:duration=4",
+         "-shortest", "-pix_fmt", "yuv420p", str(d / "clip.mp4")])
+    (d / "vet.pdf").write_bytes(
+        build_min_pdf(
+            ["Patient: Oni", "Species: Feline", "Breed: Bengal", "DOB: 2015-03-01",
+             "Conditions: chicken allergy", "Clinic: Lisbon Veterinary Centre"]
+        )
+    )
+    return d
+
+
 def multipart_post(url, files, timeout=30):
     """POST multipart/form-data with stdlib only. files = [(filename, bytes)].
     Returns (status, parsed_json)."""

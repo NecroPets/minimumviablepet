@@ -201,6 +201,34 @@ export class OllamaClient {
     }
   }
 
+  /** Plain non-streaming chat completion (video summaries etc.). */
+  async chatText(opts: {
+    messages: ChatMessage[];
+    model?: string;
+    temperature?: number;
+    keepAlive?: string;
+  }): Promise<string> {
+    const model = opts.model ?? this.models.chat;
+    const res = await fetch(`${this.base}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: opts.messages,
+        stream: false,
+        keep_alive: opts.keepAlive ?? config.keepAliveChat,
+        options: { temperature: opts.temperature ?? 0.4 },
+      }),
+      signal: AbortSignal.timeout(this.firstResponseBudget(model)),
+    });
+    if (!res.ok) {
+      throw new Error(`ollama /api/chat ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    }
+    const data = (await res.json()) as { message: { content: string } };
+    this.warmed.add(model);
+    return data.message.content.trim();
+  }
+
   /** Batch embeddings. Returns raw (un-normalized) vectors, one per input. */
   async embedBatch(texts: string[]): Promise<number[][]> {
     const res = await fetch(`${this.base}/api/embed`, {

@@ -39,6 +39,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class IngestQueue {
   private wake: (() => void) | null = null;
+  private wakePending = false;
   private active: { id: string; original_name: string; step: string } | null = null;
 
   constructor(
@@ -60,8 +61,10 @@ export class IngestQueue {
     });
   }
 
-  /** Wake the runner after enqueueing artifacts. */
+  /** Wake the runner after enqueueing artifacts. The pending flag closes the
+   * lost-wakeup window between the loop's empty check and its park. */
   notify(): void {
+    this.wakePending = true;
     this.wake?.();
     this.wake = null;
   }
@@ -120,7 +123,9 @@ export class IngestQueue {
       if (!row) {
         await new Promise<void>((resolve) => {
           this.wake = resolve;
+          if (this.wakePending) resolve();
         });
+        this.wakePending = false;
         continue;
       }
 

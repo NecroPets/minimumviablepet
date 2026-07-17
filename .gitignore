@@ -1,0 +1,5 @@
+data/
+tests/shots/
+__pycache__/
+.DS_Store
+.pytest_cache/

@@ -1,6 +1,9 @@
 {
-  "name": "necropets-ab",
+  "name": "minimumviablepet",
   "private": true,
+  "bin": {
+    "mvp": "cli/mvp.ts"
+  },
   "scripts": {
     "start": "bun server/server.ts",
     "dev": "PORT=8091 bun --watch server/server.ts",

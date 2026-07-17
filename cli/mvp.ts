@@ -136,22 +136,29 @@ async function scanDirectory(dir: string): Promise<string[]> {
   return files.sort();
 }
 
-async function uploadAndFollow(ctx: Ctx, companion: CompanionSummary, paths: string[]): Promise<number> {
+interface IngestOutcome {
+  accepted: number;
+  duplicates: number;
+  rejected: number;
+}
+
+async function uploadAndFollow(ctx: Ctx, companion: CompanionSummary, paths: string[]): Promise<IngestOutcome> {
   if (paths.length === 0) {
     console.log(dim("nothing to ingest."));
-    return 0;
+    return { accepted: 0, duplicates: 0, rejected: 0 };
   }
   console.log(`→ ingesting ${paths.length} file${paths.length === 1 ? "" : "s"} ${dim("· localhost only. nothing leaves this machine.")}`);
 
   // follow progress from before the upload so no events are missed
   const eventsRes = await fetch(`${ctx.server}/api/companions/${companion.id}/ingest/events`);
   const pending = new Set<string>();
-  let accepted = 0;
+  const outcome: IngestOutcome = { accepted: 0, duplicates: 0, rejected: 0 };
 
   for (const path of paths) {
     const file = Bun.file(path);
     if (!(await file.exists())) {
       console.log(amber(`✗ ${path} — no such file`));
+      outcome.rejected += 1;
       continue;
     }
     const form = new FormData();
@@ -164,23 +171,26 @@ async function uploadAndFollow(ctx: Ctx, companion: CompanionSummary, paths: str
     const r = body.results?.[0];
     if (!r) {
       console.log(amber(`✗ ${path} — ${body.error ?? "upload failed"}`));
+      outcome.rejected += 1;
       continue;
     }
     if (!r.ok) {
       console.log(amber(`✗ ${r.file} — ${r.error}${r.limit_mb ? ` (limit ${r.limit_mb}MB)` : ""}`));
+      outcome.rejected += 1;
       continue;
     }
     if (r.duplicate && !r.retried) {
       console.log(green(`✓ ${r.artifact!.original_name} — already known`));
+      outcome.duplicates += 1;
       continue;
     }
     pending.add(r.artifact!.id);
-    accepted += 1;
+    outcome.accepted += 1;
   }
 
   if (pending.size === 0) {
     await eventsRes.body?.cancel().catch(() => {});
-    return accepted;
+    return outcome;
   }
 
   const lineFor = new Map<string, string>();
@@ -206,12 +216,27 @@ async function uploadAndFollow(ctx: Ctx, companion: CompanionSummary, paths: str
     } else if (event === "stalled") {
       console.log(amber(`→ paused: ollama unreachable — retrying in ${(data as { retry_in_s: number }).retry_in_s}s`));
     } else if (event === "idle") {
-      break;
+      if (pending.size === 0) break;
+      // idle with files still pending means we missed their terminal events —
+      // resync from the artifacts endpoint rather than exiting early
+      const res = await fetch(`${ctx.server}/api/companions/${companion.id}/artifacts`);
+      const body = (await res.json()) as { artifacts: { id: string; original_name: string; status: string; error: string | null }[] };
+      for (const a of body.artifacts) {
+        if (!pending.has(a.id)) continue;
+        if (a.status === "processed") {
+          console.log(green(`✓ ${a.original_name}`));
+          pending.delete(a.id);
+        } else if (a.status === "failed") {
+          console.log(amber(`✗ ${a.original_name} — ${a.error}`));
+          pending.delete(a.id);
+        }
+      }
+      if (pending.size === 0) break;
     }
     if (pending.size === 0) break;
   }
   // the generator's finally released the reader when we broke out
-  return accepted;
+  return outcome;
 }
 
 /* ---------------- commands ---------------- */
@@ -254,6 +279,7 @@ async function cmdInit(ctx: Ctx, rest: string[]): Promise<void> {
     await uploadAndFollow(ctx, { ...companion, progress: { met: false, score: 0, checks: [], missing: [] } }, files);
   }
   console.log(green(`✓ ${name} exists on localhost.`) + dim(`  next: mvp run ${name.toLowerCase()} — the interview starts there. then: mvp train ${name.toLowerCase()}`));
+  process.exit(0); // explicit: a lingering SSE socket must not keep the process alive
 }
 
 async function cmdIngest(ctx: Ctx, rest: string[]): Promise<void> {
@@ -277,8 +303,11 @@ async function cmdIngest(ctx: Ctx, rest: string[]): Promise<void> {
     }
     expanded.push(p);
   }
-  const accepted = await uploadAndFollow(ctx, companion, expanded);
-  if (accepted === 0 && expanded.length > 0) process.exit(5);
+  const outcome = await uploadAndFollow(ctx, companion, expanded);
+  // exit 5 only when nothing succeeded at all — duplicates are success
+  // (the memory already holds those files), not a server error. Exit is
+  // explicit: a lingering SSE socket must not keep the process alive.
+  process.exit(outcome.rejected > 0 && outcome.accepted + outcome.duplicates === 0 ? 5 : 0);
 }
 
 function printChecklist(companion: CompanionSummary): void {
@@ -294,7 +323,7 @@ function printChecklist(companion: CompanionSummary): void {
 }
 
 async function cmdTrain(ctx: Ctx, rest: string[]): Promise<void> {
-  const { values, positionals } = parseArgs({ args: rest, options: { json: { type: "boolean" } }, allowPositionals: true });
+  const { positionals } = parseArgs({ args: rest, options: {}, allowPositionals: true });
   if (!positionals[0]) fail(1, USAGE);
   const companion = await findCompanion(ctx, positionals[0]);
 
@@ -325,7 +354,7 @@ async function cmdTrain(ctx: Ctx, rest: string[]): Promise<void> {
     } else if (event === "done") {
       if (tty) process.stdout.write(`\r\x1b[2K`);
       const d = data as { chunks_total: number; chunks_embedded: number; score: number };
-      if (values.json) console.log(JSON.stringify(data));
+      if (ctx.json) console.log(JSON.stringify(data));
       else {
         console.log(green(`✓ persona build passing`) + dim(` · ${d.chunks_total} memories indexed (${d.chunks_embedded} newly embedded)`));
         console.log(green(`✓ they're awake.`) + `  mvp run ${companion.name.toLowerCase() || companion.id.slice(0, 8)}`);
@@ -342,17 +371,20 @@ async function streamMessage(
   message: string | null,
   abortSignal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch(`${ctx.server}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(message === null ? { conversation_id: conversationId, begin: true } : { conversation_id: conversationId, message }),
-    signal: abortSignal,
-  });
-  if (!res.ok) {
-    const body = (await res.json()) as { error?: string };
-    fail(5, amber(`✗ ${body.error ?? `HTTP ${res.status}`}`));
-  }
   try {
+    // the fetch itself lives inside the try: a Ctrl-C during the pre-stream
+    // wait aborts here and must land in the interrupted path, not a raw
+    // unhandled-rejection stack trace
+    const res = await fetch(`${ctx.server}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(message === null ? { conversation_id: conversationId, begin: true } : { conversation_id: conversationId, message }),
+      signal: abortSignal,
+    });
+    if (!res.ok) {
+      const body = (await res.json()) as { error?: string };
+      fail(5, amber(`✗ ${body.error ?? `HTTP ${res.status}`}`));
+    }
     for await (const { event, data } of sseEvents(res)) {
       if (event === "delta") process.stdout.write((data as { text: string }).text);
       else if (event === "done") {
@@ -460,9 +492,9 @@ async function cmdRun(ctx: Ctx, rest: string[]): Promise<void> {
 }
 
 async function cmdList(ctx: Ctx, rest: string[]): Promise<void> {
-  const { values } = parseArgs({ args: rest, options: { json: { type: "boolean" } }, allowPositionals: false });
+  parseArgs({ args: rest, options: {}, allowPositionals: false });
   const companions = await listCompanions(ctx);
-  if (values.json) {
+  if (ctx.json) {
     console.log(JSON.stringify(companions, null, 2));
     return;
   }
@@ -480,9 +512,9 @@ async function cmdList(ctx: Ctx, rest: string[]): Promise<void> {
 }
 
 async function cmdStatus(ctx: Ctx, rest: string[]): Promise<void> {
-  const { values } = parseArgs({ args: rest, options: { json: { type: "boolean" } }, allowPositionals: false });
+  parseArgs({ args: rest, options: {}, allowPositionals: false });
   const { status, body } = await api(ctx, "GET", "/api/app/health");
-  if (values.json) {
+  if (ctx.json) {
     console.log(JSON.stringify(body, null, 2));
     process.exit(status === 200 ? 0 : 5);
   }
@@ -517,7 +549,17 @@ async function main(): Promise<void> {
     }
     return process.env.MVP_SERVER_URL || "http://127.0.0.1:8091";
   })();
-  const ctx: Ctx = { server, json: false };
+  // --json is global, extracted before per-command parsing so parseArgs
+  // never sees (and rejects) it
+  const jsonFlag = (() => {
+    const i = argv.indexOf("--json");
+    if (i >= 0) {
+      argv.splice(i, 1);
+      return true;
+    }
+    return false;
+  })();
+  const ctx: Ctx = { server, json: jsonFlag };
 
   const [cmd, ...rest] = argv;
   switch (cmd) {
@@ -539,4 +581,4 @@ async function main(): Promise<void> {
   }
 }
 
-main();
+main().catch((err: Error) => fail(5, amber(`\u2717 ${err.message}`)));

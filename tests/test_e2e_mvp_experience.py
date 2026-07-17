@@ -69,7 +69,7 @@ def test_chat_kernel(server, page_factory, ollama_up):
         """(n) => { const b = document.querySelectorAll('#mvp-chat-log .mvp-msg--bot');
               return b.length > n && (b[b.length - 1].innerText || '').trim().length > 12; }""",
         arg=bots_before,
-        timeout=90000 if ollama_up else 20000,
+        timeout=90000 if ollama_up else 45000,  # down-branch: the page aborts its fetch at 30s when ollama hangs rather than refuses
     )
     page.screenshot(path=str(SHOTS / "minimumviablepet_chat.png"))
 

@@ -49,13 +49,21 @@ def free_port() -> int:
     return port
 
 
-@pytest.fixture
-def server(tmp_path):
+def spawn_server(tmp_path, extra_env=None):
     port = free_port()
     db_path = tmp_path / "waitlist.db"
+    env = {
+        **os.environ,
+        "PORT": str(port),
+        "WAITLIST_DB": str(db_path),
+        # every test server gets an isolated engine data dir — no test may
+        # ever touch the real ~/.mvp
+        "MVP_DATA_DIR": str(tmp_path / "mvp"),
+        **(extra_env or {}),
+    }
     proc = subprocess.Popen(
         ["bun", str(SERVER_TS)],
-        env={**os.environ, "PORT": str(port), "WAITLIST_DB": str(db_path)},
+        env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
@@ -75,6 +83,22 @@ def server(tmp_path):
         raise RuntimeError(f"bun server did not become healthy on {base}: {last_err}")
 
     handle = ServerHandle(base, port, db_path, proc)
+    handle.mvp_data_dir = tmp_path / "mvp"
+    handle.mvp_db_path = tmp_path / "mvp" / "mvp.db"
+    return handle
+
+
+@pytest.fixture
+def server(tmp_path):
+    handle = spawn_server(tmp_path)
+    yield handle
+    handle.stop()
+
+
+@pytest.fixture
+def public_server(tmp_path):
+    """The Railway posture: MVP_PUBLIC=1, engine never mounted."""
+    handle = spawn_server(tmp_path, {"MVP_PUBLIC": "1"})
     yield handle
     handle.stop()
 

@@ -1530,6 +1530,54 @@ a:hover { color: var(--cyan-deep); }
   justify-content: center;
 }
 
+/* Waitlist */
+#close .np-waitlist { margin-top: clamp(30px, 4.5vw, 44px); }
+#close .np-waitlist__label {
+  display: block;
+  margin-bottom: 0.9rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+}
+#close .np-waitlist__row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  max-width: 560px;
+  margin-inline: auto;
+}
+#close .np-waitlist__field {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--ink);
+  background: rgba(8, 10, 19, 0.6);
+  border: 1px solid var(--line-gold);
+  border-radius: var(--r-pill);
+  padding: 0.85em 1.2em;
+  outline: none;
+  transition: border-color .3s var(--ease), box-shadow .3s var(--ease);
+}
+#close .np-waitlist__field::placeholder { color: var(--muted-2); }
+#close .np-waitlist__field:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(245, 201, 123, 0.14);
+}
+#close .np-waitlist__field[disabled] { opacity: 0.55; }
+#close .np-waitlist__submit { flex: none; }
+#close .np-waitlist__submit[disabled] { opacity: 0.5; cursor: not-allowed; transform: none; }
+#close .np-waitlist__msg {
+  min-height: 1.4em;
+  margin: 0.9rem auto 0;
+  font-size: 0.92rem;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+}
+#close .np-waitlist__msg[data-state="ok"]        { color: var(--gold); }
+#close .np-waitlist__msg[data-state="duplicate"] { color: var(--cyan); }
+#close .np-waitlist__msg[data-state="error"]     { color: #f3a0a0; }
+
 /* ---------- Footer ---------- */
 #close .np-footer {
   margin-top: clamp(80px, 11vw, 150px);
@@ -1605,6 +1653,8 @@ a:hover { color: var(--cyan-deep); }
 @media (max-width: 640px) {
   #close .np-footer__base { flex-direction: column; align-items: flex-start; }
   #close .np-cta__actions .np-btn { width: 100%; }
+  #close .np-waitlist__row { flex-direction: column; }
+  #close .np-waitlist__submit { width: 100%; }
 }</style>
 </head>
 <body id="top">
@@ -2228,6 +2278,25 @@ a:hover { color: var(--cyan-deep); }
           <a href="#resurrect" class="np-btn np-btn--primary np-btn--lg np-btn--inline">Bring them back</a>
           <a href="#how" class="np-btn np-btn--ghost np-btn--inline">See how it works</a>
         </div>
+        <form class="np-waitlist" data-waitlist>
+          <label class="np-waitlist__label" for="np-waitlist-email">
+            Not ready tonight? Leave your email — we'll write once, when it's time.
+          </label>
+          <div class="np-waitlist__row">
+            <input
+              id="np-waitlist-email"
+              class="np-waitlist__field"
+              type="email"
+              name="email"
+              required
+              placeholder="you@example.com"
+              autocomplete="email"
+              inputmode="email"
+            />
+            <button type="submit" class="np-btn np-btn--primary np-btn--inline np-waitlist__submit">Join the waitlist</button>
+          </div>
+          <p class="np-waitlist__msg" data-waitlist-msg data-state="idle" role="status" aria-live="polite"></p>
+        </form>
       </div>
     </div>
 
@@ -2841,6 +2910,62 @@ a:hover { color: var(--cyan-deep); }
 
     Array.prototype.forEach.call(hidden, function (el) { io.observe(el); });
   }, 600);
-})();})();</script>
+})();})();
+(function () {
+  "use strict";
+
+  /* --- Waitlist signup (variant tag: necropets) --- */
+  var VARIANT = "necropets";
+  var COPY = {
+    sending: "Sending…",
+    ok: "You're on the list. They'll wait — like they always did.",
+    duplicate: "You're already on the list — we haven't forgotten you.",
+    offline: "Couldn't reach the server — try again.",
+    error: "That didn't reach us. Try once more?"
+  };
+
+  Array.prototype.forEach.call(document.querySelectorAll("form[data-waitlist]"), function (form) {
+    var field = form.querySelector('input[type="email"]');
+    var button = form.querySelector('button[type="submit"]');
+    var msg = form.querySelector("[data-waitlist-msg]");
+
+    function setState(state, text) {
+      msg.setAttribute("data-state", state);
+      msg.textContent = text;
+    }
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      button.disabled = true;
+      setState("sending", COPY.sending);
+
+      fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: field.value.trim(), variant: VARIANT })
+      })
+        .then(function (res) {
+          return res.json().then(function (data) { return { status: res.status, data: data }; });
+        })
+        .then(function (r) {
+          if (r.status === 201) {
+            field.disabled = true;
+            setState("ok", COPY.ok);
+            return;
+          }
+          button.disabled = false;
+          if (r.status === 409) {
+            setState("duplicate", COPY.duplicate);
+            return;
+          }
+          setState("error", COPY.error + (r.data && r.data.error ? " (" + r.data.error + ")" : ""));
+        })
+        .catch(function () {
+          button.disabled = false;
+          setState("error", COPY.offline);
+        });
+    });
+  });
+})();</script>
 </body>
 </html>

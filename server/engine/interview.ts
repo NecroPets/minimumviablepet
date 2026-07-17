@@ -24,6 +24,10 @@ export const PROFILE_EXTRACT_SCHEMA = {
         passing_date: { type: "string", description: "YYYY-MM-DD, only if the owner volunteered it" },
         sex: { type: "string" },
       },
+      required: [
+        "name", "nicknames", "species", "breed", "color", "markings", "eye_color",
+        "age_at_passing", "years_together", "passing_date", "sex",
+      ],
     },
     personality: {
       type: "object",
@@ -37,6 +41,10 @@ export const PROFILE_EXTRACT_SCHEMA = {
         obsessions: strArr,
         signature_behaviors: strArr,
       },
+      required: [
+        "core_traits", "communication_style", "love_language", "energy_level",
+        "intelligence_notes", "quirks", "obsessions", "signature_behaviors",
+      ],
     },
     relationship: {
       type: "object",
@@ -47,6 +55,10 @@ export const PROFILE_EXTRACT_SCHEMA = {
         most_missed_moment: { type: "string" },
         what_they_called_out_of_owner: { type: "string" },
       },
+      required: [
+        "dynamic", "how_they_met", "normal_day", "most_missed_moment",
+        "what_they_called_out_of_owner",
+      ],
     },
     stories: strArr,
     voice_notes: {
@@ -56,9 +68,14 @@ export const PROFILE_EXTRACT_SCHEMA = {
         catchphrases_or_themes: strArr,
         things_they_would_never_say: strArr,
       },
+      required: ["how_they_would_speak", "catchphrases_or_themes", "things_they_would_never_say"],
     },
     owner_intentions: strArr,
   },
+  // every section required: with nothing required, a grammar-constrained
+  // model can legally emit {} — and does. Omission and "not stated" are
+  // different answers; empties must be explicit.
+  required: ["pet", "personality", "relationship", "stories", "voice_notes", "owner_intentions"],
 } as const;
 
 const NOTE_TAKER_PROMPT = `You are a silent note-taker for a pet-memory interview. From the transcript excerpt

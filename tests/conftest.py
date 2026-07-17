@@ -206,8 +206,10 @@ def ollama_embed_up():
 @pytest.fixture(scope="session")
 def ollama_vision_up():
     """True when the vision model answers over a real (tiny) image."""
+    # a VALID 1x1 red PNG (generated, checksum-correct — ollama rejects
+    # malformed images at request level, which would silently fail the gate)
     onepx = (
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
     )
     payload = json.dumps(
         {

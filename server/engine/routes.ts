@@ -16,6 +16,8 @@ import { sniff, type ArtifactKind } from "./ingest/sniff.ts";
 import { streamChat, type ConversationRow } from "./chat.ts";
 import { runInterviewExtraction } from "./interview.ts";
 import { runFactExtraction } from "./memory.ts";
+import { trainCompanion, trainPreflight } from "./train.ts";
+import { SSE_HEADERS, sseFrame, ssePing } from "./sse.ts";
 
 function json(status: number, body: unknown, extraHeaders?: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
@@ -354,6 +356,59 @@ export function createEngineRoutes(): EngineRouter {
     return json(201, { ok: true, conversation: { id, companion_id: row.id, kind: "chat" } });
   }
 
+  const trainingActive = new Set<string>();
+
+  function handleTrain(row: CompanionRow): Response {
+    if (trainingActive.has(row.id)) {
+      return json(409, { ok: false, error: "train_in_progress" });
+    }
+    const refusal = trainPreflight(db, row.id, progressFor(row));
+    if (refusal) return json(refusal.status, refusal.body);
+
+    trainingActive.add(row.id);
+    let controller: ReadableStreamDefaultController<Uint8Array>;
+    let closed = false;
+    const send = (event: string, data: Record<string, unknown>) => {
+      if (!closed) controller.enqueue(sseFrame(event, data));
+    };
+    let ping: ReturnType<typeof setInterval>;
+    const finish = () => {
+      if (closed) return;
+      closed = true;
+      clearInterval(ping);
+      controller.close();
+    };
+    const counts = artifactCounts.get(row.id, row.id, row.id)!;
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c;
+        ping = setInterval(() => {
+          if (!closed) controller.enqueue(ssePing());
+        }, 15_000);
+        trainCompanion(db, row.id, counts, send)
+          .then((result) => {
+            trainingActive.delete(row.id);
+            broadcaster.publish(row.id, "train", { phase: "done", ...result });
+            send("done", { ...result });
+            finish();
+          })
+          .catch((err: Error) => {
+            trainingActive.delete(row.id);
+            broadcaster.publish(row.id, "train", { phase: "error", message: err.message });
+            send("error", { message: err.message });
+            finish();
+          });
+      },
+      cancel() {
+        // training continues server-side; only the progress stream detaches —
+        // completion still clears trainingActive above
+        closed = true;
+        clearInterval(ping);
+      },
+    });
+    return new Response(stream, { headers: SSE_HEADERS });
+  }
+
   function handleMessages(conversationId: string, url: URL): Response {
     const conversation = getConversation.get(conversationId);
     if (!conversation) return json(404, { ok: false, error: "conversation_not_found" });
@@ -443,6 +498,12 @@ export function createEngineRoutes(): EngineRouter {
         }
         if (rest === "/conversations" && req.method === "GET") {
           return json(200, { ok: true, conversations: listConversations.all(row.id) });
+        }
+        if (rest === "/train") {
+          if (req.method !== "POST") {
+            return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "POST" });
+          }
+          return handleTrain(row);
         }
       }
 

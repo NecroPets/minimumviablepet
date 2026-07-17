@@ -400,6 +400,7 @@ export function createEngineRoutes(): EngineRouter {
           })
           .catch((err: Error) => {
             trainingActive.delete(row.id);
+            console.error(`train error [companion ${row.id}]: ${err.message}`);
             broadcaster.publish(row.id, "train", { phase: "error", message: err.message });
             send("error", { message: err.message });
             finish();
@@ -418,8 +419,16 @@ export function createEngineRoutes(): EngineRouter {
   function handleMessages(conversationId: string, url: URL): Response {
     const conversation = getConversation.get(conversationId);
     if (!conversation) return json(404, { ok: false, error: "conversation_not_found" });
-    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit") ?? 50)));
-    const before = Number(url.searchParams.get("before") ?? 0);
+    const limitRaw = url.searchParams.get("limit");
+    const beforeRaw = url.searchParams.get("before");
+    const limitN = limitRaw === null ? 50 : Number(limitRaw);
+    const beforeN = beforeRaw === null ? 0 : Number(beforeRaw);
+    // NaN would ride straight into the SQL LIMIT and 500 — reject it typed
+    if (!Number.isInteger(limitN) || limitN < 1 || !Number.isInteger(beforeN) || beforeN < 0) {
+      return json(400, { ok: false, error: "invalid_param" });
+    }
+    const limit = Math.min(200, limitN);
+    const before = beforeN;
     const rows = before > 0
       ? db.query(
           `SELECT id, role, content, created_at FROM (
@@ -453,7 +462,10 @@ export function createEngineRoutes(): EngineRouter {
       }
 
       const convMatch = pathname.match(/^\/api\/conversations\/([^/]+)\/messages$/);
-      if (convMatch && req.method === "GET") {
+      if (convMatch) {
+        if (req.method !== "GET") {
+          return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "GET" });
+        }
         return handleMessages(convMatch[1], new URL(req.url));
       }
 

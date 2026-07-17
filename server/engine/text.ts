@@ -60,6 +60,11 @@ const SEASON_BY_MONTH = [
 ];
 
 function elapsedPhrase(from: Date, to: Date): string {
+  // fresh grief must never be rounded up — "a few weeks" on the day the
+  // pet died would be a small cruelty
+  const days = Math.floor((to.getTime() - from.getTime()) / 86_400_000);
+  if (days < 1) return "less than a day";
+  if (days < 14) return "only days";
   let months =
     (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
   if (to.getDate() < from.getDate()) months -= 1;
@@ -77,7 +82,10 @@ export function seasonLine(now: Date, passingDate?: string): string {
     `Today is ${WEEKDAYS[now.getDay()]}, ${MONTHS[now.getMonth()]} ${now.getDate()}, ` +
     `${now.getFullYear()} — ${SEASON_BY_MONTH[now.getMonth()]}.`;
   if (!passingDate) return base;
-  const passed = new Date(passingDate);
-  if (Number.isNaN(passed.getTime()) || passed.getTime() >= now.getTime()) return base;
+  // date-only strings parse as UTC midnight; anchor them to local midnight
+  // so "died yesterday" is yesterday in the owner's timezone
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(passingDate) ? `${passingDate}T00:00:00` : passingDate;
+  const passed = new Date(normalized);
+  if (Number.isNaN(passed.getTime()) || passed.getTime() > now.getTime()) return base;
   return `${base} It has been ${elapsedPhrase(passed, now)}.`;
 }

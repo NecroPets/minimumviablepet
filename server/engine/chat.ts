@@ -157,6 +157,7 @@ async function buildResponse(opts: Parameters<typeof streamChat>[0]): Promise<Re
         } catch (err) {
           // The reply itself succeeded and is persisted; a note-taking failure
           // must be surfaced without reporting the chat as failed.
+          console.error(`extraction error [conversation ${conversation.id}]: ${(err as Error).message}`);
           extra = { extraction_error: (err as Error).message };
         }
       }
@@ -169,6 +170,9 @@ async function buildResponse(opts: Parameters<typeof streamChat>[0]): Promise<Re
         finish();
         return;
       }
+      // server-side trace: a failure before the first token would otherwise
+      // leave no evidence anywhere once the SSE client is gone
+      console.error(`chat error [conversation ${conversation.id}]: ${(err as Error).message}`);
       persistAssistant({ error: (err as Error).message });
       send(sseFrame("error", { message: (err as Error).message }));
       finish();

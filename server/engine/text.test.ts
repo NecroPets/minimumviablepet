@@ -94,8 +94,10 @@ describe("seasonLine", () => {
   test("no elapsed sentence without a passing date", () => {
     expect(seasonLine(new Date(2026, 6, 17))).not.toContain("It has been");
   });
-  test("elapsed phrasing tiers", () => {
-    const now = new Date(2026, 6, 17);
+  test("elapsed phrasing tiers — fresh grief is never rounded up", () => {
+    const now = new Date(2026, 6, 17, 12); // local noon
+    expect(seasonLine(now, "2026-07-17")).toContain("less than a day");
+    expect(seasonLine(now, "2026-07-10")).toContain("only days");
     expect(seasonLine(now, "2026-07-01")).toContain("a few weeks");
     expect(seasonLine(now, "2026-06-10")).toContain("about a month");
     expect(seasonLine(now, "2025-11-17")).toContain("about 8 months");

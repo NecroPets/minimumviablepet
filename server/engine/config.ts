@@ -10,8 +10,8 @@ function envInt(name: string, fallback: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw === "") return fallback;
   const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) {
-    throw new Error(`${name}=${JSON.stringify(raw)} is not a positive number`);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`${name}=${JSON.stringify(raw)} is not a positive integer`);
   }
   return n;
 }
@@ -33,7 +33,6 @@ export interface EngineConfig {
   whisperBin: string;
   whisperModel: string;
   maxUploadBytes: number;
-  ingestConcurrency: number;
 }
 
 export function loadConfig(): EngineConfig {
@@ -60,7 +59,6 @@ export function loadConfig(): EngineConfig {
     whisperBin: env("MVP_WHISPER_BIN", "mlx_whisper"),
     whisperModel: env("MVP_WHISPER_MODEL", "mlx-community/whisper-large-v3-turbo"),
     maxUploadBytes: envInt("MVP_MAX_UPLOAD_MB", 200) * 1024 * 1024,
-    ingestConcurrency: envInt("MVP_INGEST_CONCURRENCY", 1),
   });
 }
 

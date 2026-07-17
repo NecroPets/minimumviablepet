@@ -71,11 +71,16 @@ export class OllamaClient {
     } catch {
       return { ok: false, version: null, models: { chat: false, vision: false, embed: false } };
     }
-    const res = await fetch(`${this.base}/api/tags`, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) {
-      throw new Error(`ollama /api/tags responded ${res.status}`);
+    // a daemon that answers /api/version but wedges /api/tags must degrade
+    // the health report, not crash the health endpoint
+    let tags: string[];
+    try {
+      const res = await fetch(`${this.base}/api/tags`, { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) throw new Error(`ollama /api/tags responded ${res.status}`);
+      tags = ((await res.json()) as { models: { name: string }[] }).models.map((m) => m.name);
+    } catch {
+      return { ok: false, version, models: { chat: false, vision: false, embed: false } };
     }
-    const tags = ((await res.json()) as { models: { name: string }[] }).models.map((m) => m.name);
     const models = {
       chat: tagMatches(tags, this.models.chat),
       vision: tagMatches(tags, this.models.vision),

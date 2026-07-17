@@ -150,9 +150,16 @@ async function buildResponse(opts: Parameters<typeof streamChat>[0]): Promise<Re
         send(sseFrame("delta", { text: n.value }));
       }
       const assistantId = persistAssistant({ eval_count: stats.evalCount, duration_ms: stats.durationMs });
-      const extra = opts.postTurn
-        ? await opts.postTurn({ db, conversation, companion, userMessageId, assistantText: acc })
-        : undefined;
+      let extra: Record<string, unknown> | undefined;
+      if (opts.postTurn) {
+        try {
+          extra = await opts.postTurn({ db, conversation, companion, userMessageId, assistantText: acc });
+        } catch (err) {
+          // The reply itself succeeded and is persisted; a note-taking failure
+          // must be surfaced without reporting the chat as failed.
+          extra = { extraction_error: (err as Error).message };
+        }
+      }
       send(sseFrame("done", { message_id: assistantId, eval_count: stats.evalCount, duration_ms: stats.durationMs, ...extra }));
       finish();
     } catch (err) {

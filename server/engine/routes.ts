@@ -10,6 +10,8 @@ import { IngestQueue, type ArtifactRow, type Processor } from "./ingest/queue.ts
 import { processText } from "./ingest/processors/text.ts";
 import { sniff, type ArtifactKind } from "./ingest/sniff.ts";
 import { streamChat, type ConversationRow } from "./chat.ts";
+import { runInterviewExtraction } from "./interview.ts";
+import { runFactExtraction } from "./memory.ts";
 
 function json(status: number, body: unknown, extraHeaders?: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
@@ -308,6 +310,27 @@ export function createEngineRoutes(): EngineRouter {
       counts: artifactCounts.get(row.id, row.id, row.id)!,
       message: begin ? null : message,
       requestSignal: req.signal,
+      // begin turns carry no owner content — nothing to extract
+      postTurn: begin
+        ? undefined
+        : async ({ conversation: conv, companion, userMessageId, assistantText }) => {
+            if (conv.kind === "interview") {
+              return runInterviewExtraction(
+                db,
+                companion.id,
+                conv.id,
+                artifactCounts.get(companion.id, companion.id, companion.id)!,
+              );
+            }
+            const outcome = await runFactExtraction(
+              db,
+              companion.id,
+              userMessageId,
+              message,
+              assistantText,
+            );
+            return outcome.new_facts > 0 ? { memory: outcome } : undefined;
+          },
     });
   }
 

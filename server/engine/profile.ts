@@ -92,6 +92,83 @@ export function parseProfile(json: string): PetProfile {
   return p;
 }
 
+function jaccard(a: string, b: string): number {
+  const tokens = (s: string) => new Set(s.toLowerCase().match(/[a-z0-9']+/g) ?? []);
+  const ta = tokens(a);
+  const tb = tokens(b);
+  if (ta.size === 0 || tb.size === 0) return 0;
+  let shared = 0;
+  for (const t of ta) if (tb.has(t)) shared += 1;
+  return shared / (ta.size + tb.size - shared);
+}
+
+function fillScalars(dst: Record<string, unknown>, src: unknown): void {
+  if (!src || typeof src !== "object") return;
+  for (const key of Object.keys(dst)) {
+    const cur = dst[key];
+    const val = (src as Record<string, unknown>)[key];
+    if (typeof cur === "string" && cur.trim() === "" && typeof val === "string" && val.trim() !== "") {
+      dst[key] = val.trim();
+    }
+  }
+}
+
+function unionArray(dst: string[], src: unknown): void {
+  if (!Array.isArray(src)) return;
+  for (const item of src) {
+    if (typeof item !== "string" || item.trim() === "") continue;
+    const v = item.trim();
+    if (!dst.some((d) => d.toLowerCase() === v.toLowerCase())) dst.push(v);
+  }
+}
+
+/** Non-destructive merge of extractor output into the canonical profile:
+ * scalars fill only-if-empty (the owner's earlier words always win), arrays
+ * union with case-insensitive dedupe, stories are rejected when they retell
+ * an existing one (> 0.8 token overlap). */
+export function mergeProfile(existing: PetProfile, extracted: unknown): PetProfile {
+  const merged = structuredClone(existing);
+  if (!extracted || typeof extracted !== "object") return merged;
+  const src = extracted as Record<string, unknown>;
+
+  fillScalars(merged.pet as unknown as Record<string, unknown>, src.pet);
+  unionArray(merged.pet.nicknames, (src.pet as Record<string, unknown> | undefined)?.nicknames);
+
+  fillScalars(merged.personality as unknown as Record<string, unknown>, src.personality);
+  const per = src.personality as Record<string, unknown> | undefined;
+  unionArray(merged.personality.core_traits, per?.core_traits);
+  unionArray(merged.personality.quirks, per?.quirks);
+  unionArray(merged.personality.obsessions, per?.obsessions);
+  unionArray(merged.personality.signature_behaviors, per?.signature_behaviors);
+
+  fillScalars(merged.relationship as unknown as Record<string, unknown>, src.relationship);
+
+  fillScalars(merged.voice_notes as unknown as Record<string, unknown>, src.voice_notes);
+  const voice = src.voice_notes as Record<string, unknown> | undefined;
+  unionArray(merged.voice_notes.catchphrases_or_themes, voice?.catchphrases_or_themes);
+  unionArray(merged.voice_notes.things_they_would_never_say, voice?.things_they_would_never_say);
+
+  const medical = src.medical as Record<string, unknown> | undefined;
+  unionArray(merged.medical.conditions, medical?.conditions);
+  unionArray(merged.medical.medications, medical?.medications);
+  unionArray(merged.medical.vaccinations, medical?.vaccinations);
+  unionArray(merged.medical.sources, medical?.sources);
+
+  unionArray(merged.owner_intentions, src.owner_intentions);
+
+  if (Array.isArray(src.stories)) {
+    for (const story of src.stories) {
+      if (typeof story !== "string" || story.trim().length < 20) continue;
+      const s = story.trim();
+      if (merged.stories.length >= 50) break;
+      if (!merged.stories.some((existingStory) => jaccard(existingStory, s) > 0.8)) {
+        merged.stories.push(s);
+      }
+    }
+  }
+  return merged;
+}
+
 export interface ReadinessCheck {
   key: string;
   label: string;

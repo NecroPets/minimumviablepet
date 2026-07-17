@@ -108,6 +108,18 @@ def test_pdf_extracts_chunks_and_facts_without_clobbering(
     final = artifact_waiter(server, cid, aid, timeout=600)
     assert final["status"] == "processed", final
 
+    # fact extraction degrading to a warning is designed behavior for a
+    # flaky model — but for THIS test it means the interesting assertions
+    # can't run; fail with the actual reason instead of a bare empty-string
+    meta = json.loads(
+        sqlite3.connect(server.mvp_db_path)
+        .execute("SELECT meta_json FROM artifacts WHERE id=?", (aid,))
+        .fetchone()[0]
+    )
+    assert not any("fact_extraction_failed" in w for w in meta.get("warnings", [])), (
+        f"vet fact extraction degraded to a warning (model contention?): {meta['warnings']}"
+    )
+
     rows = chunks_for(server, aid)
     assert len(rows) >= 1
     assert all(r[0] == "vet_record" for r in rows)

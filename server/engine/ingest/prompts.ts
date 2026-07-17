@@ -55,5 +55,11 @@ export const VET_EXTRACT_SCHEMA = {
     vaccinations: { type: "array", items: str },
     clinic: str,
   },
-  required: ["conditions", "medications", "vaccinations"],
+  // every field required: grammar-constrained output must state each one
+  // explicitly (empty when unknown) instead of omitting fields at whim —
+  // omission and "not stated" are different answers
+  required: [
+    "name", "species", "breed", "sex", "color", "date_of_birth",
+    "conditions", "medications", "vaccinations", "clinic",
+  ],
 } as const;

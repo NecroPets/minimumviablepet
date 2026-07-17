@@ -1,9 +1,14 @@
-import { rmSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "./config.ts";
 import { getDb } from "./db.ts";
 import { ollama } from "./ollama.ts";
 import { parseProfile, readiness, type Readiness } from "./profile.ts";
+import { Broadcaster } from "./sse.ts";
+import { sha256Hex } from "./text.ts";
+import { IngestQueue, type ArtifactRow, type Processor } from "./ingest/queue.ts";
+import { processText } from "./ingest/processors/text.ts";
+import { sniff, type ArtifactKind } from "./ingest/sniff.ts";
 
 function json(status: number, body: unknown, extraHeaders?: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
@@ -27,8 +32,26 @@ interface CompanionRow {
   trained_at: string | null;
 }
 
+const PROCESSORS: Partial<Record<ArtifactKind, Processor>> = {
+  text: processText,
+};
+
+async function ollamaReachable(): Promise<boolean> {
+  try {
+    const res = await fetch(`${config.ollamaBaseUrl}/api/version`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function createEngineRoutes(): EngineRouter {
   const db = getDb();
+  const broadcaster = new Broadcaster();
+  const queue = new IngestQueue(db, broadcaster, PROCESSORS as Record<ArtifactKind, Processor>, ollamaReachable);
+  queue.start();
 
   const getCompanion = db.query<CompanionRow, [string]>("SELECT * FROM companions WHERE id = ?");
   const listCompanions = db.query<CompanionRow, []>("SELECT * FROM companions ORDER BY created_at");
@@ -130,6 +153,118 @@ export function createEngineRoutes(): EngineRouter {
     });
   }
 
+  const getArtifactByHash = db.query<ArtifactRow, [string, string]>(
+    "SELECT * FROM artifacts WHERE companion_id = ? AND hash = ?",
+  );
+  const getArtifactById = db.query<ArtifactRow, [string]>("SELECT * FROM artifacts WHERE id = ?");
+  const listArtifacts = db.query<ArtifactRow, [string]>(
+    "SELECT * FROM artifacts WHERE companion_id = ? ORDER BY created_at, id",
+  );
+  const insertArtifact = db.prepare(
+    `INSERT INTO artifacts (id, companion_id, kind, original_name, stored_path, mime, bytes, hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+
+  function publicArtifact(a: ArtifactRow) {
+    return {
+      id: a.id,
+      kind: a.kind,
+      original_name: a.original_name,
+      mime: a.mime,
+      bytes: a.bytes,
+      hash: a.hash,
+      status: a.status,
+      error: a.error,
+      captured_at: a.captured_at,
+    };
+  }
+
+  type StoreResult =
+    | { ok: true; duplicate: boolean; retried?: boolean; artifact: ReturnType<typeof publicArtifact> }
+    | { ok: false; file: string; error: string; limit_mb?: number };
+
+  async function storeArtifact(row: CompanionRow, filename: string, bytes: Uint8Array): Promise<StoreResult> {
+    const sniffed = sniff(filename, bytes);
+    if (!sniffed.ok) {
+      return {
+        ok: false,
+        file: filename,
+        error: sniffed.error,
+        ...(sniffed.limitMb !== undefined ? { limit_mb: sniffed.limitMb } : {}),
+      };
+    }
+    const hash = sha256Hex(bytes);
+    const existing = getArtifactByHash.get(row.id, hash);
+    if (existing) {
+      if (existing.status === "failed") {
+        // Re-uploading a failed file IS the retry mechanism.
+        db.run("UPDATE artifacts SET status = 'uploaded', error = NULL WHERE id = ?", [existing.id]);
+        return { ok: true, duplicate: true, retried: true, artifact: publicArtifact(getArtifactById.get(existing.id)!) };
+      }
+      return { ok: true, duplicate: true, artifact: publicArtifact(existing) };
+    }
+    const dir = join(config.dataDir, "companions", row.id, "artifacts");
+    mkdirSync(dir, { recursive: true });
+    const storedPath = join(dir, `${hash}.${sniffed.ext}`);
+    await Bun.write(storedPath, bytes);
+    const id = crypto.randomUUID();
+    insertArtifact.run(id, row.id, sniffed.kind, filename, storedPath, sniffed.mime, bytes.length, hash);
+    return { ok: true, duplicate: false, artifact: publicArtifact(getArtifactById.get(id)!) };
+  }
+
+  async function handleUpload(req: Request, row: CompanionRow): Promise<Response> {
+    const declared = Number(req.headers.get("content-length") ?? 0);
+    if (declared > config.maxUploadBytes) {
+      // Drain bounded oversizes so the 413 actually reaches the client
+      // (responding mid-upload resets the connection). Anything beyond the
+      // server-level cap is hard-killed by Bun before we ever see it.
+      if (declared <= config.maxUploadBytes + 8 * 1024 * 1024) await req.arrayBuffer();
+      return json(413, { ok: false, error: "payload_too_large" });
+    }
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch {
+      return json(400, { ok: false, error: "invalid_multipart" });
+    }
+    const files = form.getAll("files").filter((f): f is File => f instanceof File);
+    if (files.length === 0) return json(400, { ok: false, error: "no_files" });
+    if (files.length > 50) return json(400, { ok: false, error: "too_many_files" });
+
+    const results: StoreResult[] = [];
+    for (const file of files) {
+      results.push(await storeArtifact(row, file.name, new Uint8Array(await file.arrayBuffer())));
+    }
+    queue.notify();
+    const anyAccepted = results.some((r) => r.ok);
+    return json(anyAccepted ? 201 : 400, { ok: anyAccepted, results });
+  }
+
+  async function handleStory(req: Request, row: CompanionRow): Promise<Response> {
+    const body = await readJsonBody(req);
+    if (body instanceof Response) return body;
+    const text = typeof body.text === "string" ? body.text.trim() : "";
+    if (text === "") return json(400, { ok: false, error: "missing_text" });
+    if (text.length > 64 * 1024) return json(400, { ok: false, error: "story_too_long" });
+    const title = typeof body.title === "string" ? body.title.trim() : "";
+
+    const content = title ? `# ${title}\n\n${text}` : text;
+    const bytes = new TextEncoder().encode(content);
+    const safeName = (title || `story-${sha256Hex(bytes).slice(0, 8)}`)
+      .replace(/[^\w. -]/g, "_")
+      .slice(0, 60);
+    const result = await storeArtifact(row, `${safeName}.txt`, bytes);
+    queue.notify();
+    return json(result.ok ? 201 : 400, { ok: result.ok, result });
+  }
+
+  function handleArtifactList(row: CompanionRow): Response {
+    const artifacts = listArtifacts.all(row.id).map(publicArtifact);
+    const counts = { uploaded: 0, processing: 0, processed: 0, failed: 0 } as Record<string, number>;
+    for (const a of artifacts) counts[a.status] = (counts[a.status] ?? 0) + 1;
+    return json(200, { ok: true, artifacts, counts });
+  }
+
   function handleDelete(row: CompanionRow, url: URL): Response {
     const confirm = url.searchParams.get("confirm");
     if (confirm !== row.name) {
@@ -171,6 +306,21 @@ export function createEngineRoutes(): EngineRouter {
         }
         if (rest === "/readiness" && req.method === "GET") {
           return json(200, { ok: true, progress: progressFor(row) });
+        }
+        if (rest === "/artifacts") {
+          if (req.method === "POST") return handleUpload(req, row);
+          if (req.method === "GET") return handleArtifactList(row);
+          return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "GET, POST" });
+        }
+        if (rest === "/stories") {
+          if (req.method === "POST") return handleStory(req, row);
+          return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "POST" });
+        }
+        if (rest === "/ingest/events" && req.method === "GET") {
+          return broadcaster.subscribe(row.id, () => ({
+            event: "snapshot",
+            data: queue.snapshotFor(row.id),
+          }));
         }
       }
 

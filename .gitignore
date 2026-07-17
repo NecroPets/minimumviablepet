@@ -3,3 +3,8 @@ tests/shots/
 __pycache__/
 .DS_Store
 .pytest_cache/
+.env
+dist/
+*.db
+*.db-wal
+*.db-shm

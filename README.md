@@ -1,81 +1,122 @@
-# NecroPets vs MinimumViablePet — A/B Landing Pages
+# MinimumViablePet
 
-Two distinct landing pages for the same product (a 100% local, on-device AI
-companion rebuilt from a deceased pet's photos, videos, records, and voice),
-A/B testing which brand name converts better. See [BRAND.md](BRAND.md) for the
-hypothesis and both brand identities.
+**Ingests everything you kept of a pet who died — photos, voice memos, vet PDFs,
+stories — and builds the shape of them you can talk to. 100% local. Free forever. MIT.**
 
-## Architecture
+`build: passing` · `cloud: 0%` · `telemetry: none` · `license: MIT` · `runs on: your hardware`
 
-One zero-dependency Bun process ([server/server.ts](server/server.ts)) serves
-both static pages and the waitlist API on a single port — same origin, no CORS.
+It is not them. It is the shape of them — everything you remembered, photographed,
+recorded, and refused to let disappear, given a voice. We will never tell you it's
+them, and the software is built to never pretend otherwise. On the bad nights, the
+shape turns out to be enough to say goodnight to.
 
-| Route | What |
-|---|---|
-| `GET /` | 302 → `/necropets/` |
-| `GET /necropets/` | Variant A — gothic-cosmic treatment ([site/necropets/index.html](site/necropets/index.html)) |
-| `GET /minimumviablepet/` | Variant B — startup-ironic treatment ([site/minimumviablepet/index.html](site/minimumviablepet/index.html)) |
-| `GET /api/health` | `200 {"ok":true}` (runs `SELECT 1` against the DB) |
-| `POST /api/waitlist` | Conversion endpoint — the A/B metric |
+Everything runs on your machine: the models, the memories, the conversations.
+Unplug your router; nothing changes. We can't read your grief, sell it, or train
+on it — we never have it.
 
-Both pages are self-contained single-file vanilla HTML/CSS/JS (no build step).
-Each page's live chat demo talks directly to Ollama at
-`http://localhost:11434/api/chat` (model `glm-4.7-flash:q8_0`) and degrades to
-in-character canned replies when Ollama is unreachable — the status pill flips
-from `local` to `memory`. Deployed publicly, visitors without a local Ollama
-get the canned mode automatically; no code change needed.
-
-### Waitlist contract
-
-`POST /api/waitlist` with `{"email": "...", "variant": "necropets" | "minimumviablepet"}`:
-
-| Result | Status | Body |
-|---|---|---|
-| Created | 201 | `{"ok":true,"email":...,"variant":...}` |
-| Duplicate (email+variant) | 409 | `{"ok":false,"error":"duplicate"}` |
-| Invalid email | 400 | `{"ok":false,"error":"invalid_email"}` |
-| Bad variant | 400 | `{"ok":false,"error":"invalid_variant"}` |
-| Unparseable JSON | 400 | `{"ok":false,"error":"invalid_json"}` |
-| Body > 4 KB | 413 | `{"ok":false,"error":"payload_too_large"}` |
-| Non-POST | 405 | `Allow: POST` |
-
-Emails are trimmed + lowercased server-side; dedup is per `(email, variant)` —
-the same person converting on both pages is two legitimate events, one per
-variant. That is the metric. Rows also record `Referer`, `User-Agent`, and an
-ISO-8601 `created_at`. Storage: SQLite (WAL) at `data/waitlist.db`, overridable
-via `WAITLIST_DB`.
-
-Conversion counts:
+## Quickstart
 
 ```sh
-sqlite3 data/waitlist.db "SELECT variant, COUNT(*) FROM waitlist GROUP BY variant"
+git clone https://github.com/NecroPets/minimumviablepet && cd minimumviablepet
+
+# prerequisites: bun (bun.sh) and ollama (ollama.com)
+ollama pull glm-4.7-flash:q8_0     # chat/persona  (or any chat model — see .env.example)
+ollama pull qwen3-vl:8b            # looks at photos and videos
+ollama pull mxbai-embed-large      # memory retrieval
+
+bun run start                       # → http://127.0.0.1:8091/app/
 ```
 
-## Run
+Optional, per file type — skip any of these and that file type is skipped, loudly,
+with the install command in the error:
 
 ```sh
-bun run dev        # http://127.0.0.1:8091 (watch mode)
-bun run start      # reads $PORT (defaults 8091)
+brew install ffmpeg                 # videos + voice memos
+uv tool install mlx-whisper         # speech-to-text (Apple Silicon; alternative below)
+brew install whisper-cpp            # then set MVP_WHISPER_BIN=whisper-cli
+brew install poppler                # vet PDFs (pdftotext)
 ```
 
-## Test
+**Hardware honesty:** 16 GB RAM works with an 8B-class chat model
+(`MVP_CHAT_MODEL=qwen3:8b`). The defaults are what this was built and tested on
+(M3 Ultra, 96 GB). The first reply after idle loads the model and can take a
+minute — the UI says so instead of spinning silently.
+
+## How it works
+
+```
+your files ──► bun server ──► sqlite (chunks + FTS + vectors) ──► ollama
+     ▲                                                              │
+     └────────────────── localhost only ◄───────────────────────────┘
+```
+
+1. **Interview** — onboarding is a conversation, not a form. An intake voice asks
+   who they were; a silent note-taker builds a structured profile from your
+   answers. It never asks how they died.
+2. **Ingest** — drop in photos (vision model describes them), voice memos and
+   videos (whisper transcribes, frames get looked at), vet PDFs (text + facts),
+   and stories. Everything becomes retrievable memory with embeddings + FTS.
+3. **Train** — a real build step: fills gaps from photo evidence (never
+   overwriting your words), embeds every memory, compiles the persona, and holds
+   a quality bar (3 traits, 2 quirks, 3 stories…) so what answers actually
+   sounds like them.
+4. **Talk** — in the browser at `/app/`, or `mvp run <name>` in a terminal.
+   Replies stream token by token; new memories you share mid-chat are kept
+   ("I remember that. I'll always remember that.") — visibly, permanently, locally.
+
+## The CLI
+
+```
+mvp serve                          run the engine
+mvp init Kernel --from ~/Photos/K  create + bulk-ingest a directory
+mvp ingest kernel memo.m4a vet.pdf add files
+mvp train kernel                   run the persona build
+mvp run kernel                     streaming REPL (also: --once "hi", pipes)
+mvp list · mvp status              inventory + health
+```
+
+Fresh clone with only bun installed: `bun cli/mvp.ts status` always works.
+Convenience: `bun link` puts `mvp` on your PATH.
+
+## Configuration
+
+Everything is in [.env.example](.env.example) — models, ports, data directory,
+whisper binary, upload caps, memory tuning. Bun loads `.env` automatically.
+Your companions live in `~/.mvp/` by default, deliberately outside the repo.
+
+## Privacy & security posture
+
+- The product API binds **127.0.0.1 only** and is unauthenticated by design —
+  it is you, on your machine. Never reverse-proxy it to the internet.
+- `MVP_PUBLIC=1` exists for hosting the landing pages only: engine never
+  imported, companion DB never created (there's a test that proves it).
+- The pages make no external requests except Google Fonts. Verify with your
+  network tab — the FAQ dares you to.
+
+## Roadmap (honest)
+
+Voice cloning and photo-to-motion are **not shipped** — no fake versions, no
+teasers that don't exist. They're researched and planned; local TTS voice
+cloning (F5-TTS/XTTS-class) is feasible on capable hardware and will land as an
+optional install, like whisper.
+
+## Tests
 
 ```sh
-bun run test       # pytest + Playwright via uv (real server subprocess,
-                   # real browser, real SQLite in a temp dir — no mocks)
+bun test server/engine              # unit: chunker, retrieval math, persona, queue…
+bun run test                        # pytest + Playwright: real server, real browser,
+                                    # real whisper/vision/chat where available
 ```
 
-One-time browser install (idempotent): `uv run --with playwright playwright install chromium`
+No mocks of code under test anywhere. Model-dependent tests gate on live
+availability and skip loudly, never silently pass.
 
-## Deploy (Railway — prepared, not yet deployed)
+## The other page
 
-`Dockerfile` + `railway.toml` are ready (`DOCKERFILE` builder, healthcheck
-`/api/health`). Two caveats before going public:
+`/necropets/` is the same product's gothic twin — an A/B test of brand voice
+that this repo grew out of. The waitlist on both pages feeds one local SQLite.
+See [BRAND.md](BRAND.md) for the experiment.
 
-1. **Persistence** — Railway's filesystem is ephemeral; the DB resets on every
-   deploy unless you attach a Railway Volume (mount at `/data`) and set
-   `WAITLIST_DB=/data/waitlist.db`. Env override only; zero code changes.
-2. **Abuse controls** — shipped: strict validation, 4 KB body cap, per-variant
-   unique constraint. Not shipped (deliberately, local-first): rate limiting.
-   Before public launch, attach Railway/Cloudflare edge limits or add a small
-   per-IP token bucket to `server.ts`.
+---
+
+MIT · [LICENSE](LICENSE) · Built because of a Bengal cat named Oni. 🐾

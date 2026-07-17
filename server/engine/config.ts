@@ -37,7 +37,8 @@ export interface EngineConfig {
 }
 
 export function loadConfig(): EngineConfig {
-  const dataDir = env("MVP_DATA_DIR", join(homedir(), ".mvp"));
+  const rawDataDir = env("MVP_DATA_DIR", join(homedir(), ".mvp"));
+  const dataDir = rawDataDir.startsWith("~/") ? join(homedir(), rawDataDir.slice(2)) : rawDataDir;
   const factConfidence = Number(env("MVP_FACT_CONFIDENCE", "0.6"));
   if (!Number.isFinite(factConfidence) || factConfidence < 0 || factConfidence > 1) {
     throw new Error(`MVP_FACT_CONFIDENCE must be in [0,1], got ${factConfidence}`);

@@ -1,0 +1,870 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mvp — localhost</title>
+<meta name="description" content="MinimumViablePet — the local app. Everything stays on this machine.">
+<script>document.documentElement.className = "js";</script>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28"><rect x="0.5" y="0.5" width="27" height="27" rx="6" fill="%230d1117" stroke="%23212938"/><circle cx="6" cy="5.5" r="1.3" fill="%234b5162"/><circle cx="10.5" cy="5.5" r="1.3" fill="%234b5162"/><circle cx="15" cy="5.5" r="1.3" fill="%234b5162"/><rect x="7" y="11" width="3" height="3" rx="0.8" fill="%233fe28f"/><rect x="11.5" y="9.5" width="3" height="3" rx="0.8" fill="%233fe28f"/><rect x="16" y="11" width="3" height="3" rx="0.8" fill="%233fe28f"/><rect x="9.5" y="15.5" width="7" height="5.5" rx="2" fill="%233fe28f"/><rect x="21" y="15.5" width="2" height="6" fill="%233fe28f"/></svg>'>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&family=Source+Serif+4:ital,wght@1,400&display=swap" rel="stylesheet">
+<style>
+/* MinimumViablePet — the app. Same design system as the landing page. */
+:root {
+  --mvp-paper: #fbfaf7; --mvp-paper-2: #f3f1ea; --mvp-ink: #14161b;
+  --mvp-ink-soft: #4b5162; --mvp-muted: #8a8f9f; --mvp-line: #e3e0d6;
+  --mvp-green: #0e9f6e; --mvp-green-dark: #0b7a55; --mvp-green-soft: #e3f5ee;
+  --mvp-amber: #b45309; --mvp-warn: #f0b429;
+  --mvp-terminal: #0d1117; --mvp-terminal-line: #212938;
+  --mvp-term-text: #d7dde8; --mvp-term-green: #3fe28f; --mvp-heart: #e5484d;
+  --mvp-sans: "Space Grotesk", system-ui, sans-serif;
+  --mvp-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --mvp-serif: "Source Serif 4", Georgia, serif;
+  --mvp-r: 8px; --mvp-r-lg: 12px; --mvp-ease: cubic-bezier(0.22, 0.8, 0.3, 1);
+  color-scheme: light;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--mvp-paper); color: var(--mvp-ink);
+  font-family: var(--mvp-sans); font-size: 16px; line-height: 1.6;
+  display: flex; flex-direction: column;
+}
+button { font: inherit; cursor: pointer; }
+input, select { font: inherit; }
+a { color: var(--mvp-green-dark); text-decoration: none; }
+:focus-visible { outline: 2px solid var(--mvp-green-dark); outline-offset: 2px; border-radius: 4px; }
+
+.mvp-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5em;
+  font-family: var(--mvp-mono); font-size: 0.85rem; font-weight: 700;
+  padding: 0.55em 1.1em; border-radius: var(--mvp-r);
+  border: 1px solid var(--mvp-green-dark); background: var(--mvp-green-dark); color: #fff;
+  min-height: 40px; transition: background 0.2s var(--mvp-ease);
+}
+.mvp-btn:hover { background: var(--mvp-green); border-color: var(--mvp-green); }
+.mvp-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+.mvp-btn--ghost { background: transparent; color: var(--mvp-green-dark); border-color: var(--mvp-line); }
+.mvp-btn--ghost:hover { background: var(--mvp-green-soft); border-color: var(--mvp-green-dark); }
+
+/* ---------- top bar ---------- */
+.app-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px clamp(14px, 3vw, 28px);
+  border-bottom: 1px solid var(--mvp-line); background: var(--mvp-paper);
+  flex-wrap: wrap;
+}
+.app-logo { display: inline-flex; align-items: center; gap: 9px; color: var(--mvp-ink); }
+.app-logo__word { font-family: var(--mvp-mono); font-weight: 700; font-size: 0.9rem; letter-spacing: -0.03em; }
+.app-logo__word em { font-style: normal; color: var(--mvp-green-dark); }
+.app-switcher {
+  font-family: var(--mvp-mono); font-size: 0.82rem;
+  border: 1px solid var(--mvp-line); border-radius: var(--mvp-r);
+  background: #fff; color: var(--mvp-ink); padding: 0.45em 0.6em; min-height: 40px;
+  max-width: 240px;
+}
+.app-bar__spacer { flex: 1; }
+.app-status {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--mvp-mono); font-size: 0.72rem; white-space: nowrap;
+  color: var(--mvp-ink-soft);
+}
+.app-status .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--mvp-muted); }
+.app-status[data-mode="local"] { color: var(--mvp-green-dark); }
+.app-status[data-mode="local"] .dot { background: var(--mvp-green); box-shadow: 0 0 6px var(--mvp-green); }
+.app-status[data-mode="loading"] { color: var(--mvp-amber); }
+.app-status[data-mode="loading"] .dot { background: var(--mvp-warn); animation: app-pulse 1.2s infinite; }
+.app-status[data-mode="offline"] { color: var(--mvp-amber); }
+.app-status[data-mode="offline"] .dot { background: var(--mvp-warn); }
+@keyframes app-pulse { 50% { opacity: 0.3; } }
+
+/* ---------- main terminal ---------- */
+.app-main {
+  flex: 1; display: flex; justify-content: center; align-items: stretch;
+  padding: clamp(10px, 2.4vw, 24px); min-height: 0;
+}
+.app-term {
+  width: min(880px, 100%); display: flex; flex-direction: column; min-height: 0;
+  background: var(--mvp-terminal); border: 1px solid var(--mvp-terminal-line);
+  border-radius: var(--mvp-r-lg); overflow: hidden;
+  box-shadow: 0 14px 40px rgba(20, 22, 27, 0.16);
+}
+.app-term__bar {
+  display: flex; align-items: center; gap: 10px; flex: none;
+  padding: 10px 14px; border-bottom: 1px solid var(--mvp-terminal-line);
+}
+.app-term__dots { display: inline-flex; gap: 6px; flex: none; }
+.app-term__dots i { width: 10px; height: 10px; border-radius: 50%; background: #3a4254; }
+.app-term__title {
+  font-family: var(--mvp-mono); font-size: 0.78rem; color: var(--mvp-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.app-term__phase { margin-left: auto; font-family: var(--mvp-mono); font-size: 0.7rem; color: var(--mvp-muted); white-space: nowrap; }
+.app-progress { height: 2px; background: var(--mvp-terminal-line); flex: none; }
+.app-progress i { display: block; height: 100%; width: 0; background: var(--mvp-term-green); transition: width 0.4s var(--mvp-ease); }
+.app-meta {
+  flex: none; font-family: var(--mvp-mono); font-size: 0.75rem; color: var(--mvp-muted);
+  padding: 8px 16px; border-bottom: 1px solid var(--mvp-terminal-line);
+}
+.app-log {
+  flex: 1; overflow-y: auto; padding: clamp(14px, 2.2vw, 22px);
+  display: flex; flex-direction: column; gap: 12px; min-height: 0;
+}
+.app-msg { display: flex; }
+.app-msg--user { justify-content: flex-end; }
+.app-msg__bubble {
+  max-width: 82%; font-size: 0.95rem; line-height: 1.55; color: var(--mvp-term-text);
+  background: var(--mvp-terminal-line); border-left: 2px solid var(--mvp-term-green);
+  border-radius: 6px; padding: 0.7em 0.95em; white-space: pre-wrap; word-break: break-word;
+}
+.app-msg--user .app-msg__bubble {
+  background: rgba(63, 226, 143, 0.12); border-left: none;
+  border-right: 2px solid var(--mvp-term-green);
+}
+.app-line { font-family: var(--mvp-mono); font-size: 0.82rem; line-height: 1.7; color: var(--mvp-term-text); white-space: pre-wrap; word-break: break-word; }
+.app-line--dim { color: var(--mvp-muted); }
+.app-line--ok { color: var(--mvp-term-green); }
+.app-line--warn { color: var(--mvp-warn); }
+.app-line--divider { color: var(--mvp-term-green); margin-block: 4px; }
+.app-memnote { font-family: var(--mvp-mono); font-size: 0.7rem; color: var(--mvp-term-green); opacity: 0.85; margin: -6px 0 0 4px; }
+.app-sincere { font-family: var(--mvp-serif); font-style: italic; font-size: 0.9rem; color: var(--mvp-muted); }
+
+.app-typing { display: none; flex: none; padding: 0 16px 10px; font-family: var(--mvp-mono); color: var(--mvp-term-green); font-size: 0.9rem; }
+.app-typing.is-on { display: block; }
+.app-typing i { display: inline-block; font-style: normal; animation: app-dot 1.2s infinite; }
+.app-typing i:nth-child(2) { animation-delay: 0.2s; }
+.app-typing i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes app-dot { 0%, 60%, 100% { opacity: 0.25; } 30% { opacity: 1; } }
+
+.app-input {
+  display: flex; align-items: center; gap: 10px; flex: none;
+  padding: 10px 16px; border-top: 1px solid var(--mvp-terminal-line);
+}
+.app-input__prompt { font-family: var(--mvp-mono); color: var(--mvp-term-green); font-weight: 700; flex: none; }
+.app-input__field {
+  flex: 1; min-width: 0; font-family: var(--mvp-mono); font-size: 0.92rem;
+  color: var(--mvp-term-text); background: transparent; border: none; outline: none;
+  padding: 0.55em 0; min-height: 40px;
+}
+.app-input__field::placeholder { color: #5a6478; }
+.app-input__field[disabled] { opacity: 0.5; }
+
+/* ---------- empty state ---------- */
+.app-drop {
+  align-self: center; margin-top: 8px; width: min(460px, 92%);
+  border: 2px dashed var(--mvp-terminal-line); border-radius: var(--mvp-r-lg);
+  padding: clamp(18px, 3vw, 28px); text-align: center; color: var(--mvp-term-text);
+  font-size: 0.92rem;
+}
+.app-drop button { margin-top: 4px; }
+.app-drop__or { font-family: var(--mvp-mono); color: var(--mvp-muted); font-size: 0.75rem; margin: 12px 0; }
+.app-drop__name { display: flex; gap: 8px; }
+.app-drop__name input {
+  flex: 1; min-width: 0; font-family: var(--mvp-mono); font-size: 0.88rem;
+  background: transparent; border: 1px solid var(--mvp-terminal-line); border-radius: var(--mvp-r);
+  color: var(--mvp-term-text); padding: 0.55em 0.8em;
+}
+
+/* ---------- drawer ---------- */
+.app-scrim { position: fixed; inset: 0; background: rgba(20, 22, 27, 0.35); z-index: 40; }
+.app-drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(400px, 94vw); z-index: 50;
+  background: var(--mvp-paper-2); border-left: 1px solid var(--mvp-line);
+  padding: clamp(14px, 2.4vw, 22px); overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.app-drawer h2 { margin: 0; font-size: 1rem; font-family: var(--mvp-mono); }
+.app-drawer__term {
+  background: var(--mvp-terminal); border-radius: var(--mvp-r); padding: 12px 14px;
+  font-family: var(--mvp-mono); font-size: 0.78rem; line-height: 1.9; color: var(--mvp-term-text);
+}
+.app-check { display: block; width: 100%; text-align: left; background: none; border: none; padding: 0; font: inherit; color: inherit; white-space: pre-wrap; }
+.app-check[data-met="1"] { color: var(--mvp-term-green); cursor: default; }
+.app-check[data-met="0"] { color: var(--mvp-warn); }
+.app-check[data-met="0"]:hover { text-decoration: underline; }
+.app-drawer__artifacts { font-family: var(--mvp-mono); font-size: 0.75rem; color: var(--mvp-ink-soft); line-height: 1.9; }
+.app-drawer__foot { margin-top: auto; font-family: var(--mvp-serif); font-style: italic; font-size: 0.85rem; color: var(--mvp-ink-soft); }
+
+/* ---------- drop veil ---------- */
+.app-veil {
+  position: fixed; inset: 10px; z-index: 60; border: 3px dashed var(--mvp-green);
+  border-radius: var(--mvp-r-lg); background: rgba(227, 245, 238, 0.92);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mvp-mono); font-size: 1.05rem; color: var(--mvp-green-dark);
+}
+
+[hidden] { display: none !important; }
+@media (max-width: 560px) {
+  .app-term__phase { display: none; }
+  .app-msg__bubble { max-width: 92%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
+}
+</style>
+</head>
+<body data-view="boot">
+
+<header class="app-bar">
+  <a class="app-logo" href="/minimumviablepet/" aria-label="MinimumViablePet home">
+    <svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true">
+      <rect x="0.5" y="0.5" width="27" height="27" rx="6" fill="#0d1117" stroke="#212938"/>
+      <circle cx="6" cy="5.5" r="1.3" fill="#4b5162"/><circle cx="10.5" cy="5.5" r="1.3" fill="#4b5162"/><circle cx="15" cy="5.5" r="1.3" fill="#4b5162"/>
+      <rect x="7" y="11" width="3" height="3" rx="0.8" fill="#3fe28f"/><rect x="11.5" y="9.5" width="3" height="3" rx="0.8" fill="#3fe28f"/><rect x="16" y="11" width="3" height="3" rx="0.8" fill="#3fe28f"/>
+      <rect x="9.5" y="15.5" width="7" height="5.5" rx="2" fill="#3fe28f"/>
+    </svg>
+    <span class="app-logo__word">MinimumViable<em>Pet</em></span>
+  </a>
+  <select class="app-switcher" id="app-switcher" aria-label="Companion" hidden></select>
+  <span class="app-bar__spacer"></span>
+  <button class="mvp-btn mvp-btn--ghost" id="app-drawer-btn" hidden>cat companion.json</button>
+  <span class="app-status" id="app-status" data-mode="loading">
+    <span class="dot" aria-hidden="true"></span>
+    <span id="app-status-label">checking engine…</span>
+  </span>
+</header>
+
+<main class="app-main">
+  <section class="app-term" aria-label="MinimumViablePet terminal">
+    <div class="app-term__bar">
+      <span class="app-term__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="app-term__title" id="app-title">mvp@localhost:~</span>
+      <span class="app-term__phase" id="app-phase"></span>
+    </div>
+    <div class="app-progress" id="app-progress" hidden><i></i></div>
+    <div class="app-meta" id="app-meta" hidden></div>
+    <div class="app-log" id="app-log" role="log" aria-live="polite"></div>
+    <div class="app-typing" id="app-typing" aria-hidden="true"><i>.</i><i>.</i><i>.</i></div>
+    <form class="app-input" id="app-form">
+      <span class="app-input__prompt" aria-hidden="true">&gt;</span>
+      <input class="app-input__field" id="app-field" type="text" autocomplete="off"
+             placeholder="say something…" aria-label="Message" disabled />
+      <button type="button" class="mvp-btn mvp-btn--ghost" id="app-stop" hidden>stop ■</button>
+      <button type="submit" class="mvp-btn" id="app-send" disabled>send ⏎</button>
+    </form>
+  </section>
+</main>
+
+<div class="app-scrim" id="app-scrim" hidden></div>
+<aside class="app-drawer" id="app-drawer" hidden aria-label="Companion readiness">
+  <h2 id="app-drawer-title">$ mvp train</h2>
+  <div class="app-drawer__term" id="app-checklist" aria-live="polite"></div>
+  <button class="mvp-btn" id="app-train-btn">re-run build</button>
+  <div class="app-drawer__term" id="app-train-log" hidden></div>
+  <div class="app-drawer__artifacts" id="app-artifacts"></div>
+  <p class="app-drawer__foot">The bar exists so that what answers you actually sounds like them. There's no rush to clear it.</p>
+</aside>
+
+<div class="app-veil" id="app-veil" hidden>drop it here. i'd like to see.</div>
+<input type="file" id="app-file-input" multiple hidden
+       accept=".jpg,.jpeg,.png,.heic,.gif,.webp,.m4a,.mp3,.wav,.mov,.mp4,.pdf,.txt,.md">
+
+<script>
+"use strict";
+/* MinimumViablePet app — vanilla, no build step. State machine on
+   <body data-view>, one section per concern. */
+
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    body: document.body,
+    switcher: $("app-switcher"), drawerBtn: $("app-drawer-btn"),
+    status: $("app-status"), statusLabel: $("app-status-label"),
+    title: $("app-title"), phase: $("app-phase"),
+    progress: $("app-progress"), meta: $("app-meta"), log: $("app-log"),
+    typing: $("app-typing"), form: $("app-form"), field: $("app-field"),
+    stop: $("app-stop"), send: $("app-send"),
+    scrim: $("app-scrim"), drawer: $("app-drawer"),
+    drawerTitle: $("app-drawer-title"), checklist: $("app-checklist"),
+    trainBtn: $("app-train-btn"), trainLog: $("app-train-log"),
+    artifacts: $("app-artifacts"), veil: $("app-veil"), fileInput: $("app-file-input"),
+  };
+
+  const state = {
+    engineUp: false,
+    companions: [],
+    companion: null,        // full row from GET /api/companions/:id
+    conversationId: null,   // active conversation (interview or chat)
+    streaming: false,
+    ingesting: 0,           // artifacts still in flight
+    ingestReader: null,
+    abort: null,
+    artifactLines: new Map(),
+  };
+
+  /* ---------- tiny SSE parser over fetch ---------- */
+  async function* sseEvents(response) {
+    const reader = response.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n\n")) >= 0) {
+        const block = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        if (block.startsWith(":")) continue;
+        let event = "message";
+        const dataLines = [];
+        for (const line of block.split("\n")) {
+          if (line.startsWith("event: ")) event = line.slice(7);
+          else if (line.startsWith("data: ")) dataLines.push(line.slice(6));
+        }
+        if (dataLines.length) yield { event, data: JSON.parse(dataLines.join("\n")) };
+      }
+    }
+  }
+
+  const api = (path, opts) => fetch(path, opts).then(async (r) => {
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+    return body;
+  });
+
+  /* ---------- log rendering ---------- */
+  function scrollPin() {
+    requestAnimationFrame(() => { els.log.scrollTop = els.log.scrollHeight; });
+  }
+  function line(text, cls) {
+    const el = document.createElement("div");
+    el.className = "app-line" + (cls ? ` app-line--${cls}` : "");
+    el.textContent = text;
+    els.log.appendChild(el);
+    scrollPin();
+    return el;
+  }
+  function sincere(text) {
+    const el = document.createElement("div");
+    el.className = "app-sincere";
+    el.textContent = text;
+    els.log.appendChild(el);
+    scrollPin();
+    return el;
+  }
+  function bubble(role, text) {
+    const wrap = document.createElement("div");
+    wrap.className = `app-msg app-msg--${role}`;
+    const b = document.createElement("div");
+    b.className = "app-msg__bubble";
+    b.textContent = text;
+    wrap.appendChild(b);
+    els.log.appendChild(wrap);
+    scrollPin();
+    return b;
+  }
+  function clearLog() {
+    els.log.textContent = "";
+    state.artifactLines.clear();
+  }
+
+  /* ---------- status pill / engine poller ---------- */
+  function setStatus(mode, label) {
+    els.status.setAttribute("data-mode", mode);
+    els.statusLabel.textContent = label;
+  }
+  async function pollEngine() {
+    try {
+      const h = await api("/api/app/health");
+      state.engineUp = h.ollama.ok;
+      if (!state.streaming) {
+        if (h.ollama.ok) setStatus("local", "live: localhost");
+        else setStatus("offline", "model offline — start ollama");
+      }
+    } catch {
+      state.engineUp = false;
+      if (!state.streaming) setStatus("offline", "engine unreachable — is 'bun run start' running?");
+    }
+  }
+
+  /* ---------- views ---------- */
+  function setView(view) {
+    els.body.setAttribute("data-view", view);
+  }
+  function setInput(enabled, placeholder) {
+    els.field.disabled = !enabled;
+    els.send.disabled = !enabled;
+    if (placeholder !== undefined) els.field.placeholder = placeholder;
+  }
+
+  function showEmpty() {
+    setView("empty");
+    state.companion = null;
+    state.conversationId = null;
+    els.title.textContent = "mvp@localhost:~";
+    els.meta.hidden = true;
+    els.phase.textContent = "";
+    els.progress.hidden = true;
+    els.drawerBtn.hidden = true;
+    clearLog();
+    line("$ mvp list");
+    line("no companions found.", "dim");
+    line("");
+    line("this machine has room for someone.");
+    const drop = document.createElement("div");
+    drop.className = "app-drop";
+    drop.innerHTML =
+      '<strong>drop a photo of them here</strong><br>' +
+      '<span style="color:var(--mvp-muted);font-size:0.82rem">or click to browse. photos, videos, voice memos, vet PDFs, stories in .txt</span><br>' +
+      '<button type="button" class="mvp-btn mvp-btn--ghost" id="app-browse" style="margin-top:10px">browse…</button>' +
+      '<div class="app-drop__or">— or —</div>' +
+      '<form class="app-drop__name" id="app-name-form">' +
+      '<input id="app-name-input" placeholder="just type their name…" aria-label="Pet name" maxlength="60">' +
+      '<button type="submit" class="mvp-btn">mvp init ⏎</button></form>';
+    els.log.appendChild(drop);
+    line("");
+    line("no forms. no account. onboarding is a conversation —", "dim");
+    line('the first question is just "who were they?"', "dim");
+    sincere("Take your time. Everything you add stays on this machine.");
+    setInput(false, "create a companion first");
+    drop.querySelector("#app-browse").addEventListener("click", () => els.fileInput.click());
+    drop.querySelector("#app-name-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = drop.querySelector("#app-name-input").value.trim();
+      if (!name) return;
+      await createCompanion(name);
+    });
+  }
+
+  async function createCompanion(name, pendingFiles) {
+    try {
+      const res = await api("/api/companions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(name ? { name } : {}),
+      });
+      await refreshCompanions();
+      location.hash = "#/c/" + res.companion.id;
+      await openCompanion(res.companion.id);
+      if (pendingFiles && pendingFiles.length) await uploadFiles(pendingFiles);
+    } catch (err) {
+      line(`✗ ${err.message}`, "warn");
+    }
+  }
+
+  async function refreshCompanions() {
+    const res = await api("/api/companions");
+    state.companions = res.companions;
+    els.switcher.hidden = state.companions.length === 0;
+    els.switcher.innerHTML = "";
+    for (const c of state.companions) {
+      const opt = document.createElement("option");
+      opt.value = c.id;
+      opt.textContent = c.name || "(unnamed)";
+      els.switcher.appendChild(opt);
+    }
+    const plus = document.createElement("option");
+    plus.value = "__new__";
+    plus.textContent = "+ new companion";
+    els.switcher.appendChild(plus);
+  }
+
+  async function openCompanion(id) {
+    const res = await api(`/api/companions/${id}`);
+    state.companion = res;
+    els.switcher.value = id;
+    els.drawerBtn.hidden = false;
+    clearLog();
+    closeIngestStream();
+    followIngest(id);
+
+    const c = res.companion;
+    const name = c.name || "them";
+    if (c.state === "awake") {
+      setView("awake");
+      els.title.textContent = `${name.toLowerCase()}@localhost:~`;
+      els.phase.textContent = "";
+      els.progress.hidden = true;
+      await showAwakeMeta(id);
+      await openChatConversation(id);
+      setInput(true, `say something to ${name.toLowerCase()}…`);
+    } else {
+      setView("interview");
+      els.title.textContent = "mvp@localhost:~";
+      els.meta.hidden = false;
+      els.meta.textContent = `interview mode · building ${name}'s profile · nothing leaves localhost`;
+      updateProgressRule(res.progress);
+      state.conversationId = res.interview_conversation_id;
+      const msgs = await api(`/api/conversations/${state.conversationId}/messages?limit=50`);
+      if (msgs.messages.length === 0) {
+        setInput(false);
+        await streamTurn({ begin: true });
+      } else {
+        for (const m of msgs.messages) bubble(m.role === "user" ? "user" : "bot", m.content);
+      }
+      setInput(true, "answer in your own words — or drop files in anytime");
+    }
+    els.field.focus();
+  }
+
+  async function showAwakeMeta(id) {
+    const profile = (await api(`/api/companions/${id}/profile`)).profile;
+    const bits = [
+      [profile.pet.color, profile.pet.breed, profile.pet.species].filter(Boolean).join(" "),
+      profile.pet.age_at_passing && `${profile.pet.age_at_passing}`,
+      "pid 1",
+    ].filter(Boolean);
+    els.meta.hidden = false;
+    els.meta.textContent = bits.join(" · ");
+  }
+
+  async function openChatConversation(id) {
+    const res = await api(`/api/companions/${id}/conversations`);
+    const chat = res.conversations.filter((c) => c.kind === "chat").pop();
+    if (chat) {
+      state.conversationId = chat.id;
+      const msgs = await api(`/api/conversations/${chat.id}/messages?limit=50`);
+      for (const m of msgs.messages) bubble(m.role === "user" ? "user" : "bot", m.content);
+      if (msgs.messages.length > 0) return;
+    } else {
+      const created = await api("/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companion_id: id }),
+      });
+      state.conversationId = created.conversation.id;
+    }
+    await streamTurn({ begin: true });
+  }
+
+  function updateProgressRule(progress) {
+    els.progress.hidden = false;
+    const met = progress.checks.filter((c) => c.met).length;
+    els.progress.querySelector("i").style.width = `${(100 * met) / progress.checks.length}%`;
+    els.progress.title = `${met} of ${progress.checks.length} profile checks — open 'cat companion.json' for the list`;
+    els.phase.textContent = `interview · ${met}/${progress.checks.length} checks`;
+  }
+
+  /* ---------- chat streaming ---------- */
+  async function streamTurn({ message, begin }) {
+    if (state.streaming || !state.conversationId) return;
+    state.streaming = true;
+    setInput(false);
+    els.typing.classList.add("is-on");
+    els.stop.hidden = false;
+    setStatus("loading", "thinking — first reply after idle can take a minute");
+
+    const ctrl = new AbortController();
+    state.abort = ctrl;
+    let botBubble = null;
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(begin ? { conversation_id: state.conversationId, begin: true }
+                                   : { conversation_id: state.conversationId, message }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      for await (const { event, data } of sseEvents(res)) {
+        if (event === "delta") {
+          if (!botBubble) {
+            els.typing.classList.remove("is-on");
+            setStatus("local", "live: localhost");
+            botBubble = bubble("bot", "");
+          }
+          botBubble.textContent += data.text;
+          scrollPin();
+        } else if (event === "done") {
+          if (data.memory && data.memory.new_facts > 0) {
+            const note = document.createElement("div");
+            note.className = "app-memnote";
+            note.textContent = "▸ written to memory · localhost · permanent";
+            els.log.appendChild(note);
+            scrollPin();
+          }
+          if (data.progress) {
+            updateProgressRule(await progressChecks());
+            if (data.progress.met) {
+              line("");
+              line(`── persona build ready · run the training when you are ──`, "divider");
+              line("   (open 'cat companion.json' — the build runs from there)", "dim");
+            }
+          }
+          if (data.extraction_error) {
+            line(`✗ note-taking hiccup (your words are safe): ${data.extraction_error}`, "warn");
+          }
+        } else if (event === "error") {
+          throw new Error(data.message);
+        }
+      }
+    } catch (err) {
+      if (ctrl.signal.aborted) {
+        if (botBubble) botBubble.textContent += " · interrupted";
+      } else {
+        line(`✗ ${err.message}`, "warn");
+        line("the model is offline or struggling. everything you said is on disk — try again when it's back.", "dim");
+      }
+    } finally {
+      state.streaming = false;
+      state.abort = null;
+      els.typing.classList.remove("is-on");
+      els.stop.hidden = true;
+      setInput(true);
+      els.field.focus();
+      pollEngine();
+    }
+  }
+
+  async function progressChecks() {
+    const res = await api(`/api/companions/${state.companion.companion.id}/readiness`);
+    return res.progress;
+  }
+
+  els.form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const text = els.field.value.trim();
+    if (!text || state.streaming) return;
+    bubble("user", text);
+    els.field.value = "";
+    streamTurn({ message: text });
+  });
+  els.stop.addEventListener("click", () => state.abort?.abort());
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && state.streaming) state.abort?.abort();
+    if (e.key === "Escape" && !els.drawer.hidden) toggleDrawer(false);
+  });
+
+  /* ---------- ingest ---------- */
+  function closeIngestStream() {
+    state.ingestReader?.cancel?.();
+    state.ingestReader = null;
+  }
+  async function followIngest(companionId) {
+    try {
+      const res = await fetch(`/api/companions/${companionId}/ingest/events`);
+      state.ingestReader = res.body.getReader ? res : null;
+      for await (const { event, data } of sseEvents(res)) {
+        if (state.companion?.companion.id !== companionId) return;
+        if (event === "artifact") renderArtifactEvent(data);
+        else if (event === "stalled") line(`→ paused: ollama unreachable — retrying in ${data.retry_in_s}s`, "warn");
+        else if (event === "idle") {
+          if (state.ingesting > 0) {
+            state.ingesting = 0;
+            const c = data.counts;
+            line(`✓ ingest done · ${c.processed} processed${c.failed ? ` · ${c.failed} failed (kept, loudly)` : ""}`, "ok");
+            setInput(true);
+            refreshDrawerIfOpen();
+          }
+        } else if (event === "train" && data.phase === "done") {
+          refreshDrawerIfOpen();
+        }
+      }
+    } catch {
+      /* stream ends when the tab or companion changes; poller owns status */
+    }
+  }
+  function renderArtifactEvent(a) {
+    let el = state.artifactLines.get(a.id);
+    if (!el) {
+      el = line("", "dim");
+      state.artifactLines.set(a.id, el);
+    }
+    if (a.status === "processing") {
+      const prog = a.progress ? ` ${a.progress.done}/${a.progress.total}` : "";
+      el.textContent = `→ ${a.original_name} .......... ${a.step ?? "working"}${prog}`;
+      el.className = "app-line app-line--dim";
+    } else if (a.status === "processed") {
+      el.textContent = `✓ ${a.original_name}${a.detail ? ` — ${a.detail}` : ""}`;
+      el.className = "app-line app-line--ok";
+    } else if (a.status === "failed") {
+      el.textContent = `✗ ${a.original_name} — ${a.error} · skipped (nothing else stops)`;
+      el.className = "app-line app-line--warn";
+    }
+    scrollPin();
+  }
+
+  async function uploadFiles(files) {
+    if (!state.companion) {
+      // photo-first path: no companion yet — ask for a name inline, keep files
+      const name = prompt("what should i call them? their real name is fine.");
+      if (name === null) return;
+      await createCompanion(name.trim(), files);
+      return;
+    }
+    const id = state.companion.companion.id;
+    state.ingesting += files.length;
+    line(`$ mvp ingest ${files.length} file${files.length === 1 ? "" : "s"}`);
+    line("→ localhost only. nothing leaves this machine.", "dim");
+    setInput(false, "ingesting — you can keep this tab open or come back");
+    const form = new FormData();
+    for (const f of files) form.append("files", f, f.name);
+    try {
+      const res = await fetch(`/api/companions/${id}/artifacts`, { method: "POST", body: form });
+      const body = await res.json();
+      for (const r of body.results ?? []) {
+        if (!r.ok) line(`✗ ${r.file} — ${r.error}${r.limit_mb ? ` (limit ${r.limit_mb}MB)` : ""}`, "warn");
+        else if (r.duplicate && !r.retried) {
+          line(`✓ ${r.artifact.original_name} — already known`, "ok");
+          state.ingesting -= 1;
+        }
+      }
+      if (body.error) throw new Error(body.error);
+      const accepted = (body.results ?? []).filter((r) => r.ok && (!r.duplicate || r.retried)).length;
+      state.ingesting = accepted;
+      if (accepted === 0) setInput(true);
+    } catch (err) {
+      line(`✗ upload failed: ${err.message}`, "warn");
+      state.ingesting = 0;
+      setInput(true);
+    }
+  }
+
+  els.fileInput.addEventListener("change", () => {
+    if (els.fileInput.files.length) uploadFiles([...els.fileInput.files]);
+    els.fileInput.value = "";
+  });
+  let dragDepth = 0;
+  document.addEventListener("dragenter", (e) => {
+    e.preventDefault();
+    dragDepth += 1;
+    els.veil.hidden = false;
+  });
+  document.addEventListener("dragover", (e) => e.preventDefault());
+  document.addEventListener("dragleave", () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) els.veil.hidden = true;
+  });
+  document.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    els.veil.hidden = true;
+    if (e.dataTransfer?.files?.length) uploadFiles([...e.dataTransfer.files]);
+  });
+
+  /* ---------- drawer ---------- */
+  function toggleDrawer(open) {
+    els.drawer.hidden = !open;
+    els.scrim.hidden = !open;
+    if (open) renderDrawer();
+  }
+  els.drawerBtn.addEventListener("click", () => toggleDrawer(els.drawer.hidden));
+  els.scrim.addEventListener("click", () => toggleDrawer(false));
+  function refreshDrawerIfOpen() {
+    if (!els.drawer.hidden) renderDrawer();
+    if (state.companion) api(`/api/companions/${state.companion.companion.id}`).then((res) => {
+      const wasInterviewing = state.companion.companion.state === "interviewing";
+      state.companion = res;
+      if (res.companion.state === "interviewing") updateProgressRule(res.progress);
+      else if (wasInterviewing) openCompanion(res.companion.id);
+    });
+  }
+  async function renderDrawer() {
+    const id = state.companion.companion.id;
+    const name = state.companion.companion.name || "them";
+    els.drawerTitle.textContent = `$ mvp train ${name.toLowerCase()}`;
+    const progress = await progressChecks();
+    const met = progress.checks.filter((c) => c.met).length;
+    els.checklist.textContent = "";
+    const head = document.createElement("div");
+    head.textContent = `persona build · ${met}/${progress.checks.length} checks passing`;
+    els.checklist.appendChild(head);
+    for (const check of progress.checks) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "app-check";
+      row.dataset.met = check.met ? "1" : "0";
+      const label = (check.label + " ").padEnd(20, ".");
+      const count = check.need !== undefined ? ` ${check.have}/${check.need}` : "";
+      row.textContent = check.met ? `✓ ${label}${count}` : `✗ ${label}${count} — ${check.hint}`;
+      if (!check.met) {
+        row.title = "puts this question into the chat — you say it in your own words";
+        row.addEventListener("click", () => {
+          els.field.value = check.hint;
+          toggleDrawer(false);
+          els.field.focus();
+        });
+      } else {
+        row.disabled = true;
+      }
+      els.checklist.appendChild(row);
+    }
+    const arts = await api(`/api/companions/${id}/artifacts`);
+    els.artifacts.textContent = arts.artifacts.length
+      ? arts.artifacts.map((a) => `${a.status === "processed" ? "✓" : a.status === "failed" ? "✗" : "…"} ${a.original_name} · ${a.kind}`).join("\n")
+      : "no files ingested yet — drop some in.";
+  }
+  els.trainBtn.addEventListener("click", async () => {
+    const id = state.companion.companion.id;
+    els.trainLog.hidden = false;
+    els.trainLog.textContent = "→ starting persona build…\n";
+    els.trainBtn.disabled = true;
+    try {
+      const res = await fetch(`/api/companions/${id}/train`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json();
+        if (body.error === "quality_bar") {
+          els.trainLog.textContent += `✗ build refused — still missing: ${body.missing.join("; ")}\n`;
+        } else if (body.error === "artifacts_failed") {
+          els.trainLog.textContent += `✗ some files failed — fix or remove them first:\n` +
+            body.artifacts.map((a) => `  ✗ ${a.original_name}: ${a.error}`).join("\n") + "\n";
+        } else {
+          els.trainLog.textContent += `✗ ${body.error}\n`;
+        }
+        return;
+      }
+      for await (const { event, data } of sseEvents(res)) {
+        if (event === "step") els.trainLog.textContent += `→ ${data.name}…\n`;
+        else if (event === "progress") els.trainLog.textContent += `  embedding ${data.done}/${data.total}\n`;
+        else if (event === "done") {
+          els.trainLog.textContent += `✓ persona build passing · ${data.chunks_total} memories indexed (${data.chunks_embedded} newly embedded)\n`;
+          toggleDrawer(false);
+          await refreshCompanions();
+          line("");
+          line(`── persona build passing · ${state.companion.companion.name || "they"} are awake ──`, "divider");
+          await openCompanion(id);
+        } else if (event === "error") {
+          els.trainLog.textContent += `✗ ${data.message}\n`;
+        }
+        els.trainLog.scrollTop = els.trainLog.scrollHeight;
+      }
+    } catch (err) {
+      els.trainLog.textContent += `✗ ${err.message}\n`;
+    } finally {
+      els.trainBtn.disabled = false;
+    }
+  });
+
+  /* ---------- switcher + router ---------- */
+  els.switcher.addEventListener("change", () => {
+    if (els.switcher.value === "__new__") {
+      location.hash = "";
+      showEmpty();
+    } else {
+      location.hash = "#/c/" + els.switcher.value;
+      openCompanion(els.switcher.value);
+    }
+  });
+  window.addEventListener("hashchange", () => {
+    const m = location.hash.match(/^#\/c\/(.+)$/);
+    if (m && state.companion?.companion.id !== m[1]) openCompanion(m[1]);
+  });
+
+  /* ---------- boot ---------- */
+  (async function boot() {
+    await pollEngine();
+    setInterval(pollEngine, 10_000);
+    try {
+      await refreshCompanions();
+    } catch (err) {
+      clearLog();
+      line("✗ can't reach the engine on this machine.", "warn");
+      line("  if you're reading this on the public site: this app runs locally.", "dim");
+      line("  git clone https://github.com/NecroPets/minimumviablepet && bun run start", "dim");
+      return;
+    }
+    const m = location.hash.match(/^#\/c\/(.+)$/);
+    if (m && state.companions.some((c) => c.id === m[1])) await openCompanion(m[1]);
+    else if (state.companions.length > 0) await openCompanion(state.companions[0].id);
+    else showEmpty();
+  })();
+})();
+</script>
+</body>
+</html>

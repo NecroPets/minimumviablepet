@@ -1273,6 +1273,19 @@ a:hover { color: var(--cyan-deep); }
   font-weight: 700;
 }
 #privacy .tier__cta { width: 100%; margin-top: auto; }
+#privacy .privacy__tiers--single {
+  grid-template-columns: minmax(0, 560px);
+  justify-content: center;
+}
+#privacy .privacy__tiers--single .tier--featured { transform: none; }
+#privacy .tier__source {
+  display: block;
+  text-align: center;
+  margin-top: 0.9rem;
+  font-size: 0.88rem;
+  letter-spacing: 0.02em;
+}
+#privacy .tier__source:hover { color: var(--ink-strong); }
 
 /* Featured Soul tier — the hero */
 #privacy .tier--featured {
@@ -2096,61 +2109,33 @@ a:hover { color: var(--cyan-deep); }
 
     <hr class="np-divider" />
 
-    <!-- PART B — Pricing -->
+    <!-- PART B — The cost -->
     <header class="privacy__head privacy__head--pricing np-reveal" id="pricing">
-      <span class="np-eyebrow">Bring them home</span>
-      <h2 class="np-display np-display--lg">Choose how close you keep them.</h2>
-      <p class="np-lead">Start free and meet them again. Deepen the bond when you're ready. Every tier runs privately, on your device.</p>
+      <span class="np-eyebrow">The cost</span>
+      <h2 class="np-display np-display--lg">Free. Completely, and forever.</h2>
+      <p class="np-lead">NecroPets runs on your machine, from your memories, with no one in between. There is nothing to subscribe to and no one to pay. The code is open — yours, in every sense a thing can be.</p>
     </header>
 
-    <div class="privacy__tiers">
+    <div class="privacy__tiers privacy__tiers--single">
 
-      <!-- Spark -->
-      <article class="np-card np-card--hover tier np-reveal" style="--np-delay:.05s">
-        <h3 class="tier__name">Spark</h3>
-        <p class="tier__sub np-muted">A first hello.</p>
-        <div class="tier__price"><span class="tier__amount">Free</span></div>
+      <article class="np-card tier tier--featured np-halo np-reveal">
+        <span class="tier__badge">Every companion</span>
+        <h3 class="tier__name">Everything</h3>
+        <p class="tier__sub np-muted">For meeting them again. And every day after.</p>
+        <div class="tier__price"><span class="tier__amount">$0</span><span class="tier__per">always</span></div>
         <ul class="tier__list">
-          <li><span class="tier__check" aria-hidden="true">✓</span> One companion, fully on-device</li>
-          <li><span class="tier__check" aria-hidden="true">✓</span> Text chat that remembers you</li>
-          <li><span class="tier__check" aria-hidden="true">✓</span> Photos &amp; stories to teach them</li>
-          <li><span class="tier__check" aria-hidden="true">✓</span> Private forever — no cloud</li>
+          <li><span class="tier__check" aria-hidden="true">✓</span> Every companion, every memory, on your device</li>
+          <li><span class="tier__check" aria-hidden="true">✓</span> Their voice in text — their whole particular self</li>
+          <li><span class="tier__check" aria-hidden="true">✓</span> Open source — you may read exactly how they're kept</li>
+          <li><span class="tier__check" aria-hidden="true">✓</span> If we disappear, they do not</li>
         </ul>
-        <a href="#resurrect" class="np-btn np-btn--ghost np-btn--inline tier__cta">Begin gently</a>
-      </article>
-
-      <!-- Soul (featured hero) -->
-      <article class="np-card tier tier--featured np-halo np-reveal" style="--np-delay:.13s">
-        <span class="tier__badge">Most chosen</span>
-        <h3 class="tier__name">Soul</h3>
-        <p class="tier__sub np-muted">The full reunion.</p>
-        <div class="tier__price"><span class="tier__amount">$19</span><span class="tier__per">/ month</span></div>
-        <ul class="tier__list">
-          <li><span class="tier__check" aria-hidden="true">✓</span> Their voice, restored and speaking</li>
-          <li><span class="tier__check" aria-hidden="true">✓</span> Deep memory of your whole life together</li>
-          <li><span class="tier__check" aria-hidden="true">✓</span> Photos brought to life as gentle video</li>
-          <li><span class="tier__check" aria-hidden="true">✓</span> Unlimited memories &amp; companions</li>
-        </ul>
-        <a href="#resurrect" class="np-btn np-btn--primary np-btn--inline tier__cta">Bring them back</a>
-      </article>
-
-      <!-- Eternal -->
-      <article class="np-card np-card--hover tier np-reveal" style="--np-delay:.21s">
-        <h3 class="tier__name">Eternal</h3>
-        <p class="tier__sub np-muted">Beyond the screen.</p>
-        <div class="tier__price"><span class="tier__amount">$49</span><span class="tier__per">/ month</span></div>
-        <ul class="tier__list">
-          <li><span class="tier__check" aria-hidden="true">✓</span> Everything in Soul, always</li>
-          <li><span class="tier__check" aria-hidden="true">✓</span> A physical, voice-preserved heirloom</li>
-          <li><span class="tier__check" aria-hidden="true">✓</span> Priority resurrection &amp; restoration</li>
-          <li><span class="tier__check" aria-hidden="true">✓</span> White-glove memory archival</li>
-        </ul>
-        <a href="#resurrect" class="np-btn np-btn--ghost np-btn--inline tier__cta">Keep them always</a>
+        <a href="#resurrect" class="np-btn np-btn--primary np-btn--inline tier__cta">Begin gently</a>
+        <a href="https://github.com/NecroPets/minimumviablepet" rel="noopener" class="tier__source np-muted">Read the source</a>
       </article>
 
     </div>
 
-    <p class="privacy__foot np-muted np-reveal">Every plan is private by design. Cancel anytime — your companion and their memories stay yours, on your device.</p>
+    <p class="privacy__foot np-muted np-reveal">Private by design, free by principle. Grief should never have a renewal date.</p>
 
   </div>
 </section>

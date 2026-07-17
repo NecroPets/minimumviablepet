@@ -136,7 +136,7 @@ def test_mobile_nav_drawer(server, page_factory):
     assert links.is_visible(), "burger opens the drawer"
     assert burger.get_attribute("aria-expanded") == "true"
 
-    links.locator("a", has_text="Pricing").click()
+    links.locator("a", has_text="FAQ").click()
     page.wait_for_timeout(300)
     assert not links.is_visible(), "choosing a link closes the drawer"
     assert burger.get_attribute("aria-expanded") == "false"
@@ -147,7 +147,7 @@ def test_faq_one_open_at_a_time(server, page_factory):
     page.goto(server.base_url + PATH, wait_until="load", timeout=30000)
     items = page.locator(".mvp-faq__item")
     count = items.count()
-    assert count == 6
+    assert count == 7
 
     def open_states():
         return [items.nth(i).get_attribute("open") is not None for i in range(count)]

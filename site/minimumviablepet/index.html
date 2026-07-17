@@ -686,6 +686,8 @@ html.js .mvp-reveal.is-in { opacity: 1; transform: none; }
   color: var(--mvp-ink-soft);
 }
 
+#pricing .mvp-pricing__grid--single { grid-template-columns: minmax(0, 520px); justify-content: center; }
+
 @media (max-width: 880px) {
   #pricing .mvp-pricing__grid { grid-template-columns: 1fr; max-width: 460px; margin-inline: auto; }
   #pricing .mvp-tier--featured { order: -1; }
@@ -849,8 +851,9 @@ html.js .mvp-reveal.is-in { opacity: 1; transform: none; }
       <div class="mvp-nav__links" id="mvp-nav-links">
         <a href="#how">How it works</a>
         <a href="#demo">Demo</a>
-        <a href="#pricing">Pricing</a>
+        <a href="#pricing">$0 forever</a>
         <a href="#faq">FAQ</a>
+        <a href="https://github.com/NecroPets/minimumviablepet" rel="noopener">GitHub ↗</a>
       </div>
       <a class="mvp-btn mvp-nav__cta" href="#waitlist" aria-label="Join the waitlist">join --waitlist</a>
     </div>
@@ -866,6 +869,7 @@ html.js .mvp-reveal.is-in { opacity: 1; transform: none; }
           <span class="mvp-badge"><b>build</b><span>passing</span></span>
           <span class="mvp-badge"><b>cloud</b><span>0%</span></span>
           <span class="mvp-badge"><b>telemetry</b><span>none</span></span>
+          <span class="mvp-badge"><b>license</b><span>MIT</span></span>
           <span class="mvp-badge mvp-badge--amber"><b>runs on</b><span>your hardware</span></span>
         </div>
         <h1>You kept every photo for a reason.</h1>
@@ -892,6 +896,7 @@ html.js .mvp-reveal.is-in { opacity: 1; transform: none; }
           <p class="mvp-waitlist__msg" data-waitlist-msg data-state="idle" role="status" aria-live="polite">No newsletter. No drip campaign. No "circling back."</p>
         </form>
         <a class="mvp-hero__demo-link" href="#demo">Try the live demo ↓</a>
+        <a class="mvp-hero__demo-link" data-app-link href="https://github.com/NecroPets/minimumviablepet" rel="noopener" style="margin-left: 1.4em;">Read the source ↗</a>
       </div>
 
       <div class="mvp-term mvp-boot mvp-reveal">
@@ -1042,50 +1047,27 @@ html.js .mvp-reveal.is-in { opacity: 1; transform: none; }
     <div class="mvp-container">
       <div class="mvp-pricing__head">
         <p class="mvp-eyebrow">// pricing</p>
-        <h2 class="mvp-h2">Simple pricing. No per-seat nonsense.</h2>
-        <p class="mvp-lead">Every tier runs fully local. The free one is actually free.</p>
+        <h2 class="mvp-h2">The price is $0. The catch is also $0.</h2>
+        <p class="mvp-lead">MinimumViablePet is free and open source, and runs entirely on your machine. We can't charge rent for your own memories — we never have them in the first place.</p>
       </div>
-      <div class="mvp-pricing__grid">
-        <div class="mvp-card mvp-tier mvp-reveal">
-          <h3>Sandbox</h3>
-          <p class="mvp-tier__price">$0</p>
-          <p class="mvp-tier__for">For meeting them again.</p>
-          <ul>
-            <li>One companion, fully on-device</li>
-            <li>Local text chat with memory</li>
-            <li>Photo + story ingest</li>
-            <li>Yours forever, even offline</li>
-          </ul>
-          <a class="mvp-btn mvp-btn--ghost" href="#waitlist">Start free</a>
-        </div>
+      <div class="mvp-pricing__grid mvp-pricing__grid--single">
         <div class="mvp-card mvp-tier mvp-tier--featured mvp-reveal">
-          <span class="mvp-tier__flag">most deployed</span>
-          <h3>Production</h3>
-          <p class="mvp-tier__price">$19<small> / month</small></p>
-          <p class="mvp-tier__for">For every day.</p>
+          <span class="mvp-tier__flag">free tier: everything</span>
+          <h3>Open Source</h3>
+          <p class="mvp-tier__price">$0<small> forever</small></p>
+          <p class="mvp-tier__for">For meeting them again. And every day after.</p>
           <ul>
-            <li>Their voice, rebuilt from your clips</li>
-            <li>Deep long-term memory</li>
-            <li>Photos brought to gentle motion</li>
-            <li>Unlimited companions</li>
+            <li>Every feature, unlimited companions</li>
+            <li>Runs on your hardware — your electric bill is the whole invoice</li>
+            <li>MIT licensed: audit it, fork it, keep it</li>
+            <li>No account, no server, no company between you</li>
           </ul>
-          <a class="mvp-btn" href="#waitlist">Go to prod</a>
-        </div>
-        <div class="mvp-card mvp-tier mvp-reveal">
-          <h3>LTS</h3>
-          <p class="mvp-tier__price">$49<small> / month</small></p>
-          <p class="mvp-tier__for">Long-term support. The longest.</p>
-          <ul>
-            <li>Everything in Production</li>
-            <li>A physical voice-keepsake device</li>
-            <li>Priority model upgrades</li>
-            <li>White-glove memory archival</li>
-          </ul>
-          <a class="mvp-btn mvp-btn--ghost" href="#waitlist">Get LTS</a>
+          <a class="mvp-btn" href="https://github.com/NecroPets/minimumviablepet" rel="noopener">Read the source ↗</a>
+          <a class="mvp-btn mvp-btn--ghost" style="margin-top: 10px;" href="https://github.com/NecroPets/minimumviablepet" rel="noopener">★ Star it — that's our business model</a>
         </div>
       </div>
       <p class="mvp-pricing__foot">
-        Cancel anytime. The weights are on your disk — canceling doesn't take anyone away from you.
+        Nothing to cancel. The weights live on your disk — nobody can take anyone away from you.
       </p>
     </div>
   </section>
@@ -1125,10 +1107,12 @@ html.js .mvp-reveal.is-in { opacity: 1; transform: none; }
           <summary class="mvp-faq__q">Is this just a system prompt in a trench coat?</summary>
           <div class="mvp-faq__a">
             <p>
-              No. It's a local fine-tune plus a memory index built from what you upload, running
-              on Ollama-compatible runtimes. The demo above literally talks to
-              <code>localhost:11434</code> — that's the same path your companion uses. If the
-              model isn't running, the page says so instead of faking it.
+              No. It's a persona built by a structured interview plus a retrieval memory index
+              over everything you upload, running on Ollama-compatible runtimes. The demo above
+              literally talks to <code>localhost:11434</code> — that's the same path your
+              companion uses. And now you can
+              <a href="https://github.com/NecroPets/minimumviablepet" rel="noopener">read the code</a>
+              that does it. If the model isn't running, the page says so instead of faking it.
             </p>
           </div>
         </details>
@@ -1169,6 +1153,16 @@ html.js .mvp-reveal.is-in { opacity: 1; transform: none; }
             <p>
               To your pet? Nothing. That's the whole architecture. The model and the memories are
               files on your disk. We designed ourselves to be unnecessary.
+            </p>
+          </div>
+        </details>
+        <details class="mvp-faq__item">
+          <summary class="mvp-faq__q">So how do you make money?</summary>
+          <div class="mvp-faq__a">
+            <p>
+              We don't. It runs on your computer; our costs are a domain name and feelings.
+              It's MIT licensed, so if that ever changes, this version is yours regardless —
+              forever, unconditionally.
             </p>
           </div>
         </details>
@@ -1228,9 +1222,10 @@ html.js .mvp-reveal.is-in { opacity: 1; transform: none; }
       <nav class="mvp-footer__nav" aria-label="Footer">
         <a href="#how">How it works</a>
         <a href="#demo">Demo</a>
-        <a href="#pricing">Pricing</a>
+        <a href="#pricing">$0 forever</a>
         <a href="#faq">FAQ</a>
         <a href="#waitlist">Waitlist</a>
+        <a href="https://github.com/NecroPets/minimumviablepet" rel="noopener">GitHub ↗</a>
       </nav>
     </div>
     <div class="mvp-footer__base">
@@ -1243,7 +1238,7 @@ html.js .mvp-reveal.is-in { opacity: 1; transform: none; }
           <rect x="4" y="7.5" width="7" height="5.5" rx="2" fill="#e5484d"/>
         </svg>
       </p>
-      <p class="mvp-footer__credit">© <span id="mvp-year">2026</span> MinimumViablePet · 0 trackers on this page (view source) · localhost, forever</p>
+      <p class="mvp-footer__credit">© <span id="mvp-year">2026</span> MinimumViablePet · MIT · open source · 0 trackers on this page (view source) · localhost, forever</p>
     </div>
   </div>
 </footer>
@@ -1610,6 +1605,19 @@ html.js .mvp-reveal.is-in { opacity: 1; transform: none; }
       if (msg.getAttribute("data-state") === "error") setState("idle", IDLE_HELPER);
     });
   });
+})();
+
+(function () {
+  "use strict";
+
+  /* --- Local visitors get a door into the actual app --- */
+  var appLink = document.querySelector("[data-app-link]");
+  if (!appLink) return;
+  if (["localhost", "127.0.0.1", "[::1]"].includes(location.hostname)) {
+    appLink.href = "/app/";
+    appLink.removeAttribute("rel");
+    appLink.textContent = "Open the app →";
+  }
 })();
 
 (function () {

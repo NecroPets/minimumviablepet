@@ -5,7 +5,7 @@ import { mergeProfile, parseProfile } from "../../profile.ts";
 import { chunkText } from "../../text.ts";
 import { VET_EXTRACT_PROMPT, VET_EXTRACT_SCHEMA } from "../prompts.ts";
 import type { Processor } from "../queue.ts";
-import { patchArtifactMeta, storeArtifactChunks, type ChunkItem } from "../store.ts";
+import { artifactStillExists, patchArtifactMeta, storeArtifactChunks, type ChunkItem } from "../store.ts";
 
 interface VetExtraction {
   name?: string;
@@ -64,6 +64,11 @@ export const processPdf: Processor = async (ctx) => {
       ],
       format: VET_EXTRACT_SCHEMA as unknown as object,
     });
+    // re-check after the model await: a forget that landed mid-extraction
+    // must not resurrect as vet facts on the profile
+    if (!artifactStillExists(db, artifact.id)) {
+      throw new Error(`${artifact.original_name} was forgotten mid-processing — leaving no trace`);
+    }
     const row = db
       .query<{ profile_json: string }, [string]>("SELECT profile_json FROM companions WHERE id = ?")
       .get(artifact.companion_id)!;

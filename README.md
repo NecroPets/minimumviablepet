@@ -125,6 +125,19 @@ moment for a vector index, not before.
 - The pages make no external requests except Google Fonts. Verify with your
   network tab — the FAQ dares you to.
 
+## Project them into the room
+
+[hardware/](hardware/README.md) is the open-schematics folder: a $10
+Pepper's-ghost phone pyramid, a desk-scale floating-image box, a room-scale
+projection scrim, and a ceiling pan/tilt rig with reference ESP32 firmware —
+all MIT, all buildable at a kitchen table, all honest about the physics
+(light needs a surface; we pick surfaces you stop noticing). The engine
+feeds them at `/emanate/`: their real photos, cycling on pure black, which
+is the whole optical trick. [hardware/frontier/](hardware/frontier/README.md)
+documents the actual research edge (ultrasound phased arrays) and the
+physics wall behind "hard light," so nobody has to wonder if we're hiding
+the good stuff. We're not. There is no good stuff without a surface.
+
 ## Roadmap (honest)
 
 Voice cloning and photo-to-motion are **not shipped** — no fake versions, no

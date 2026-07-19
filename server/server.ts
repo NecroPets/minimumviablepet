@@ -54,6 +54,12 @@ const PAGES: Record<string, string> = {
       }),
 };
 
+// The landing page's dogfood video. Served here (not by the engine) so it
+// works in MVP_PUBLIC mode, and self-hosted so the pages' "no external
+// requests except Google Fonts" promise stays literally true. Fixed path,
+// no request input reaches the filesystem.
+const DEMO_VIDEO = join(import.meta.dir, "..", "demo", "oni-demo.mp4");
+
 function json(
   status: number,
   body: unknown,
@@ -67,6 +73,43 @@ function json(
 
 function redirect(status: number, location: string): Response {
   return new Response(null, { status, headers: { Location: location } });
+}
+
+/** Serve the demo mp4 with byte-range support so the video is seekable.
+ * A missing file (a deploy that forgot to COPY it) fails loudly with 404. */
+async function serveDemoVideo(req: Request): Promise<Response> {
+  const file = Bun.file(DEMO_VIDEO);
+  if (!(await file.exists())) {
+    console.error(`demo video missing on disk: ${DEMO_VIDEO}`);
+    return json(404, { ok: false, error: "demo_video_missing" });
+  }
+  const size = file.size;
+  const base = {
+    "Content-Type": "video/mp4",
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "public, max-age=3600",
+  };
+  const isHead = req.method === "HEAD";
+  const range = req.headers.get("range");
+  if (!range) {
+    return new Response(isHead ? null : file, {
+      headers: { ...base, "Content-Length": String(size) },
+    });
+  }
+  const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+  const start = m && m[1] ? Number(m[1]) : 0;
+  const end = m && m[2] ? Number(m[2]) : size - 1;
+  if (!m || start > end || end >= size) {
+    return new Response(null, { status: 416, headers: { ...base, "Content-Range": `bytes */${size}` } });
+  }
+  return new Response(isHead ? null : file.slice(start, end + 1), {
+    status: 206,
+    headers: {
+      ...base,
+      "Content-Range": `bytes ${start}-${end}/${size}`,
+      "Content-Length": String(end - start + 1),
+    },
+  });
 }
 
 async function handleWaitlist(req: Request): Promise<Response> {
@@ -144,6 +187,7 @@ const server = Bun.serve({
         return json(200, { ok: true });
       }
       if (pathname === "/") return redirect(302, "/minimumviablepet/");
+      if (pathname === "/demo/oni-demo.mp4") return serveDemoVideo(req);
       if (
         pathname === "/necropets" ||
         pathname === "/minimumviablepet" ||

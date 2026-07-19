@@ -6,4 +6,6 @@ ENV MVP_PUBLIC=1
 COPY package.json ./
 COPY server/ server/
 COPY site/ site/
+# the landing page's dogfood video (served by server.ts at /demo/oni-demo.mp4)
+COPY demo/oni-demo.mp4 demo/oni-demo.mp4
 CMD ["bun", "server/server.ts"]

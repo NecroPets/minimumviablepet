@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mvp — emanate</title>
+<style>
+  /* A projection surface, not a UI. Everything that is not the photo is
+     pure black — black is the one color Pepper's ghost and scrims cannot
+     see, which is what makes the shape float. */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #000; overflow: hidden; }
+  body { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; color: #9ab89f; }
+  body.hide-cursor { cursor: none; }
+
+  /* picker overlay */
+  #picker { position: fixed; inset: 0; display: grid; place-content: center; gap: 14px;
+            background: #000; z-index: 30; text-align: left; }
+  #picker h1 { font-size: 15px; font-weight: 500; color: #3fe28f; }
+  #picker .line { font-size: 12px; color: #56705c; max-width: 52ch; }
+  #picker button { display: block; width: 100%; text-align: left; background: #0d1117;
+            border: 1px solid #1d2a22; color: #9ab89f; font: inherit; font-size: 13px;
+            padding: 9px 12px; margin-top: 6px; border-radius: 6px; cursor: pointer; }
+  #picker button:hover { border-color: #3fe28f; color: #d7e8db; }
+  #picker .opts { display: flex; gap: 16px; margin-top: 10px; font-size: 12px; color: #56705c; }
+  #picker .opts label { cursor: pointer; }
+  #picker .warn { color: #e0b34a; font-size: 12px; max-width: 52ch; }
+
+  /* the stage */
+  #stage { position: fixed; inset: 0; display: none; }
+  #stage.on { display: block; }
+  .layer { position: absolute; inset: 0; display: grid; place-content: center;
+           opacity: 0; transition: opacity 2.4s ease; }
+  .layer.showing { opacity: 1; }
+  .layer img { max-width: 92vw; max-height: 92vh; object-fit: contain; }
+
+  /* quad mode: four upright-facing copies around the center for the pyramid */
+  #stage.quad .layer { display: block; }
+  #stage.quad .layer img { position: absolute; left: 50%; top: 50%;
+           max-width: 30vmin; max-height: 30vmin; }
+  #stage.quad .layer img:nth-child(1) { transform: translate(-50%, -132%); }
+  #stage.quad .layer img:nth-child(2) { transform: translate(-50%, 32%) rotate(180deg); }
+  #stage.quad .layer img:nth-child(3) { transform: translate(-132%, -50%) rotate(90deg); }
+  #stage.quad .layer img:nth-child(4) { transform: translate(32%, -50%) rotate(-90deg); }
+
+  #caption { position: fixed; left: 50%; bottom: 4vh; transform: translateX(-50%);
+             font-size: 12px; letter-spacing: 0.2em; color: #2c4033; z-index: 10; }
+  #status { position: fixed; left: 50%; bottom: 4vh; transform: translateX(-50%);
+            font-size: 13px; color: #e0b34a; z-index: 20; text-align: center; }
+</style>
+</head>
+<body>
+  <div id="picker">
+    <h1>$ mvp emanate</h1>
+    <div class="line">Pick a companion. This page cycles their real photographs on pure
+    black — feed it to a pyramid, a desk box, or a scrim (see hardware/ in the repo).
+    It projects what you photographed. Nothing more is claimed.</div>
+    <div id="companions"></div>
+    <div class="opts">
+      <label><input type="radio" name="mode" value="single" checked> single (box / scrim)</label>
+      <label><input type="radio" name="mode" value="quad"> 4-up (phone pyramid)</label>
+      <label><input type="checkbox" id="optcaption" checked> name line</label>
+    </div>
+    <div class="line">esc returns here · the cursor hides itself · nothing leaves localhost</div>
+    <div class="warn" id="pickerwarn" hidden></div>
+  </div>
+
+  <div id="stage">
+    <div class="layer" id="layerA"></div>
+    <div class="layer" id="layerB"></div>
+  </div>
+  <div id="caption" hidden></div>
+  <div id="status" hidden></div>
+
+<script>
+(() => {
+  "use strict";
+  const els = {
+    picker: document.getElementById("picker"),
+    companions: document.getElementById("companions"),
+    pickerwarn: document.getElementById("pickerwarn"),
+    optcaption: document.getElementById("optcaption"),
+    stage: document.getElementById("stage"),
+    layers: [document.getElementById("layerA"), document.getElementById("layerB")],
+    caption: document.getElementById("caption"),
+    status: document.getElementById("status"),
+  };
+  const RENDERABLE = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
+  const HOLD_MS = 9000;
+  let photos = [];        // {id, url, caption}
+  let companion = null;   // {id, name}
+  let idx = 0;
+  let front = 0;          // which layer is visible
+  let timer = null;
+  let cursorTimer = null;
+
+  function warn(text) {
+    els.pickerwarn.hidden = false;
+    els.pickerwarn.textContent = text;
+  }
+  function status(text) {
+    els.status.hidden = !text;
+    els.status.textContent = text || "";
+  }
+
+  async function api(path) {
+    const res = await fetch(path);
+    const body = await res.json();
+    if (!res.ok || body.ok === false) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  }
+
+  function extOf(name) {
+    const i = name.lastIndexOf(".");
+    return i === -1 ? "" : name.slice(i + 1).toLowerCase();
+  }
+
+  function mode() {
+    return document.querySelector('input[name="mode"]:checked').value;
+  }
+
+  async function loadCompanions() {
+    els.companions.textContent = "";
+    let list;
+    try {
+      list = (await api("/api/companions")).companions;
+    } catch (err) {
+      warn(`✗ couldn't reach the engine: ${err.message} — is \`mvp serve\` running?`);
+      return;
+    }
+    if (list.length === 0) {
+      warn("✗ no companions yet — create one at /app/ first.");
+      return;
+    }
+    for (const c of list) {
+      const btn = document.createElement("button");
+      btn.textContent = `emanate ${c.name.toLowerCase()}/`;
+      btn.addEventListener("click", () => begin(c));
+      els.companions.appendChild(btn);
+    }
+  }
+
+  async function begin(c) {
+    companion = c;
+    let memories;
+    try {
+      memories = (await api(`/api/companions/${c.id}/memories`)).memories;
+    } catch (err) {
+      warn(`✗ couldn't load memories: ${err.message}`);
+      return;
+    }
+    photos = memories.photos
+      .filter((p) => RENDERABLE.has(extOf(p.filename)))
+      .map((p) => ({
+        id: p.id,
+        url: `/api/companions/${c.id}/artifacts/${p.id}/file`,
+        caption: p.caption,
+      }));
+    if (photos.length === 0) {
+      warn(`✗ no photos the browser can show for ${c.name} — drop jpg/png/webp into /app/ first. (HEIC is kept but can't be projected here yet — no pretending.)`);
+      return;
+    }
+    const params = new URLSearchParams({ companion: c.id, mode: mode() });
+    if (!els.optcaption.checked) params.set("caption", "0");
+    history.replaceState(null, "", `?${params}`);
+
+    els.picker.style.display = "none";
+    els.stage.className = mode() === "quad" ? "on quad" : "on";
+    els.caption.hidden = !(els.optcaption.checked && mode() === "single");
+    els.caption.textContent = c.name.toLowerCase();
+    idx = 0;
+    front = 0;
+    showNext(true);
+  }
+
+  function fillLayer(layer, photo) {
+    layer.textContent = "";
+    const copies = els.stage.classList.contains("quad") ? 4 : 1;
+    for (let i = 0; i < copies; i++) {
+      const img = document.createElement("img");
+      img.src = photo.url;
+      img.alt = photo.caption || "";
+      layer.appendChild(img);
+    }
+  }
+
+  function showNext(first) {
+    const photo = photos[idx % photos.length];
+    idx += 1;
+    const back = 1 - front;
+    const incoming = els.layers[back];
+    fillLayer(incoming, photo);
+    const firstImg = incoming.querySelector("img");
+    firstImg.addEventListener("load", () => {
+      status("");
+      els.layers[front].classList.remove("showing");
+      incoming.classList.add("showing");
+      front = back;
+      timer = setTimeout(showNext, HOLD_MS);
+    }, { once: true });
+    firstImg.addEventListener("error", () => {
+      // a photo the server can no longer find is skipped LOUDLY, not silently
+      status(`✗ photo failed to load (${photo.url}) — skipping it`);
+      timer = setTimeout(showNext, first ? 400 : 2000);
+    }, { once: true });
+  }
+
+  function stopShow() {
+    clearTimeout(timer);
+    timer = null;
+    els.stage.className = "";
+    for (const l of els.layers) { l.classList.remove("showing"); l.textContent = ""; }
+    els.caption.hidden = true;
+    status("");
+    els.picker.style.display = "grid";
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && timer) stopShow();
+  });
+
+  document.addEventListener("mousemove", () => {
+    document.body.classList.remove("hide-cursor");
+    clearTimeout(cursorTimer);
+    cursorTimer = setTimeout(() => document.body.classList.add("hide-cursor"), 3000);
+  });
+
+  // deep link: ?companion=<id>&mode=quad&caption=0 boots straight into the show
+  async function boot() {
+    await loadCompanions();
+    const params = new URLSearchParams(location.search);
+    const wanted = params.get("companion");
+    if (!wanted) return;
+    if (params.get("mode") === "quad") {
+      document.querySelector('input[name="mode"][value="quad"]').checked = true;
+    }
+    if (params.get("caption") === "0") els.optcaption.checked = false;
+    try {
+      const c = (await api(`/api/companions/${wanted}`)).companion;
+      begin({ id: c.id, name: c.name });
+    } catch (err) {
+      warn(`✗ companion from the URL not found (${err.message}) — pick one below.`);
+    }
+  }
+  boot();
+})();
+</script>
+</body>
+</html>

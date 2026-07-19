@@ -1,5 +1,6 @@
 import type { PetProfile } from "../profile.ts";
 import { energyScalar, reactionsFor } from "./persona.ts";
+import type { RigAnchors } from "./pose.ts";
 
 export interface RigDescriptor {
   version: 1;
@@ -11,6 +12,7 @@ export interface RigDescriptor {
     torso: { cx: number; cy: number; top: number; bottom: number };
   };
   persona: { energy_scalar: number; reactions: string[] };
+  anchors?: RigAnchors;
 }
 
 /** Deterministic fractional regions for a front-facing full-body cutout:
@@ -24,8 +26,16 @@ const REGIONS: RigDescriptor["regions"] = {
 };
 
 /** Build the rig descriptor the frontend depends on verbatim. Pure — persona
- * fields come from persona.ts, region fractions are fixed for Phase 1. */
-export function buildDescriptor(companionId: string, cutout: { w: number; h: number }, profile: PetProfile): RigDescriptor {
+ * fields come from persona.ts, region fractions are fixed for Phase 1.
+ * `anchors` (Phase 2 articulation) is included only when non-empty, so the
+ * frontend can cleanly test `if (descriptor.anchors?.eye_l)` without an
+ * always-present-but-empty key. */
+export function buildDescriptor(
+  companionId: string,
+  cutout: { w: number; h: number },
+  profile: PetProfile,
+  anchors?: RigAnchors,
+): RigDescriptor {
   return {
     version: 1,
     cutout_url: `/api/companions/${companionId}/rig/cutout`,
@@ -35,5 +45,6 @@ export function buildDescriptor(companionId: string, cutout: { w: number; h: num
       energy_scalar: energyScalar(profile),
       reactions: reactionsFor(profile),
     },
+    ...(anchors && Object.keys(anchors).length > 0 ? { anchors } : {}),
   };
 }

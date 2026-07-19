@@ -136,9 +136,22 @@ def test_rig_build_and_serve_real_masker(server, upload, artifact_waiter):
     # match -> the reaction library's declared order)
     assert rig["persona"] == {"energy_scalar": 0.55, "reactions": ["ear_perk", "head_tilt", "lean"]}
 
+    # Phase 2: real Vision animal-pose keypoints on the real cutout. A cat's
+    # eyes are the anchors Vision finds most reliably (docs/EMBODIMENT-PLAN.md
+    # Phase 2) — assert presence and shape, not exact coordinates (a real
+    # model's output on a real photo, not a fixture).
+    assert "anchors" in rig
+    for key in ("eye_l", "eye_r"):
+        anchor = rig["anchors"][key]
+        assert 0.0 <= anchor["x"] <= 1.0
+        assert 0.0 <= anchor["y"] <= 1.0
+        assert 0.5 <= anchor["conf"] <= 1.0
+
     status, body = api(server, "GET", f"/api/companions/{cid}/rig")
     assert status == 200
     assert body["rig"] == rig
+    assert body["rig"]["anchors"]["eye_l"] == rig["anchors"]["eye_l"]
+    assert body["rig"]["anchors"]["eye_r"] == rig["anchors"]["eye_r"]
 
     with urllib.request.urlopen(f"{server.base_url}/api/companions/{cid}/rig/cutout") as r:
         assert r.status == 200

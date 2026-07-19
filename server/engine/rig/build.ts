@@ -5,6 +5,7 @@ import { config } from "../config.ts";
 import { parseProfile } from "../profile.ts";
 import { buildDescriptor, type RigDescriptor } from "./descriptor.ts";
 import { maskToCutout, maskerAvailable } from "./masker.ts";
+import { detectAnchors } from "./pose.ts";
 
 interface SourceArtifact {
   id: string;
@@ -125,7 +126,11 @@ export async function buildRig(
   copyFileSync(best.path, cutoutPath);
   for (const t of temps) rmSync(t, { force: true });
 
-  const descriptor = buildDescriptor(companion.id, { w: best.w, h: best.h }, parseProfile(companion.profile_json));
+  // Phase 2 articulation is a non-fatal enhancement over the Phase 1 warp
+  // rig: detectAnchors already returns {} (never throws) when the pose
+  // toolchain is unavailable or Vision finds no animal.
+  const anchors = await detectAnchors(cutoutPath);
+  const descriptor = buildDescriptor(companion.id, { w: best.w, h: best.h }, parseProfile(companion.profile_json), anchors);
   db.run("UPDATE companions SET rig_json = ? WHERE id = ?", [JSON.stringify(descriptor), companion.id]);
   return descriptor;
 }

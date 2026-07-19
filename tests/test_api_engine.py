@@ -141,3 +141,43 @@ def test_public_mode_hides_engine_entirely(public_server):
         assert r.status == 201
 
     assert not public_server.mvp_db_path.exists(), "public mode must never create mvp.db"
+
+
+def test_demo_video_served_with_range(server):
+    """The landing page's dogfood video is self-hosted (so the pages' no-
+    external-requests promise holds) and byte-range seekable."""
+    # full GET
+    with urllib.request.urlopen(server.base_url + "/demo/oni-demo.mp4") as r:
+        assert r.status == 200
+        assert r.headers.get("Content-Type") == "video/mp4"
+        assert r.headers.get("Accept-Ranges") == "bytes"
+        size = int(r.headers.get("Content-Length"))
+        assert size > 100_000
+
+    # range request → 206 with the exact slice
+    req = urllib.request.Request(server.base_url + "/demo/oni-demo.mp4", headers={"Range": "bytes=0-1023"})
+    with urllib.request.urlopen(req) as r:
+        assert r.status == 206
+        assert r.headers.get("Content-Range") == f"bytes 0-1023/{size}"
+        assert len(r.read()) == 1024
+
+    # unsatisfiable range → 416
+    req = urllib.request.Request(server.base_url + "/demo/oni-demo.mp4", headers={"Range": f"bytes={size}-"})
+    try:
+        urllib.request.urlopen(req)
+        raise AssertionError("expected 416")
+    except urllib.error.HTTPError as e:
+        assert e.code == 416
+
+
+def test_demo_video_served_in_public_mode(public_server):
+    """It is a landing-page asset, so it must serve even with the engine off."""
+    with urllib.request.urlopen(public_server.base_url + "/demo/oni-demo.mp4") as r:
+        assert r.status == 200
+        assert r.headers.get("Content-Type") == "video/mp4"
+
+
+def test_landing_page_references_the_demo_video(server):
+    with urllib.request.urlopen(server.base_url + "/minimumviablepet/") as r:
+        html = r.read().decode()
+    assert "/demo/oni-demo.mp4" in html

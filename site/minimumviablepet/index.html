@@ -452,6 +452,24 @@ html.js .mvp-reveal.is-in { opacity: 1; transform: none; }
 @media (max-width: 980px) { #how .mvp-how__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { #how .mvp-how__grid { grid-template-columns: 1fr; } }
 
+/* ---------- Dogfood (Oni) ---------- */
+
+#dogfood .mvp-see__head { max-width: 60ch; margin-bottom: clamp(28px, 4vw, 40px); }
+.mvp-see__frame {
+  max-width: 340px; margin-inline: auto;
+  background: var(--mvp-terminal); border: 1px solid var(--mvp-terminal-line);
+  border-radius: var(--mvp-r-lg); padding: 10px; box-shadow: 0 20px 60px rgba(13, 17, 23, 0.18);
+}
+.mvp-see__video {
+  display: block; width: 100%; aspect-ratio: 9 / 16;
+  border-radius: var(--mvp-r); background: #000;
+}
+.mvp-see__cap {
+  font-family: var(--mvp-mono); font-size: 0.82rem; color: var(--mvp-muted);
+  text-align: center; margin-top: 16px; max-width: 52ch; margin-inline: auto;
+}
+.mvp-see__cap a { color: var(--mvp-green-dark); }
+
 /* ---------- Demo (Kernel) ---------- */
 
 #demo .mvp-demo__head { max-width: 66ch; margin-bottom: clamp(28px, 4vw, 40px); }
@@ -986,6 +1004,36 @@ html.js .mvp-reveal.is-in { opacity: 1; transform: none; }
       <p class="mvp-chat__note">
         Wired to <code>http://localhost:11434</code> (Ollama · glm-4.7-flash). This page makes no
         external requests — verify us. (okay: one request, to Google Fonts. we're working on it.)
+      </p>
+    </div>
+  </section>
+
+  <section class="mvp-section" id="dogfood">
+    <div class="mvp-container">
+      <div class="mvp-see__head">
+        <p class="mvp-eyebrow">// dogfood</p>
+        <h2 class="mvp-h2">Kernel is a bit. Oni was a real cat.</h2>
+        <p class="mvp-lead">
+          We ran the whole thing on our own Bengal: six photos and five sentences in, an awake
+          companion out. This is that run — the real app, the real models, nothing staged.
+          It is not him. It is the shape of him.
+        </p>
+      </div>
+
+      <div class="mvp-see__frame mvp-reveal">
+        <video
+          class="mvp-see__video"
+          src="/demo/oni-demo.mp4"
+          controls
+          playsinline
+          preload="metadata"
+          aria-label="MinimumViablePet demo: Oni, built from six photos and five sentences"
+        ></video>
+      </div>
+      <p class="mvp-see__cap">
+        77 seconds · captions on, sound optional. The full write-up (every input, and the bug the
+        run caught) is in
+        <a href="https://github.com/NecroPets/minimumviablepet/tree/main/demo" rel="noopener">demo/</a>.
       </p>
     </div>
   </section>

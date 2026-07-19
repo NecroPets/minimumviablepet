@@ -1,5 +1,16 @@
 # Brand A/B Test: NecroPets vs MinimumViablePet
 
+## Decision (2026-07-19): MinimumViablePet
+
+The experiment is settled by owner decision, not by conversion data — no paid
+traffic split ever ran, so there are no numbers to report and none are claimed.
+MinimumViablePet is the brand: `/` now lands on `/minimumviablepet/`, and the
+repo, README, and product UI already speak in its voice. NecroPets remains
+served at `/necropets/` as the archived variant — same waitlist API, still
+tagged per-variant — because the page is finished work and keeping it costs
+nothing. The sections below are preserved as the record of the experiment's
+design.
+
 ## Hypothesis
 
 From the EternalPaw platform docs: *"A/B testing in grief markets consistently

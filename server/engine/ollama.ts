@@ -270,14 +270,17 @@ export class OllamaClient {
       body: JSON.stringify({
         model,
         stream: false,
-        // think:false — a thinking-capable vision model would spend the
-        // token budget reasoning and return empty content. num_ctx pinned:
-        // on a shared daemon, omitting it routes to whatever instance a
-        // resident agent last configured (a 262k-context runner dies on
-        // image inputs); an explicit modest context gets a right-sized one.
+        // think:false is best-effort: newer qwen3-vl builds think anyway
+        // (ollama 0.15.x passes the flag; the model ignores it), so the
+        // token budget must survive a thinking preamble AND the caption —
+        // at 400 the thinking ate the budget and every photo failed with
+        // an empty description. num_ctx pinned: on a shared daemon,
+        // omitting it routes to whatever instance a resident agent last
+        // configured (a 262k-context runner dies on image inputs); an
+        // explicit modest context gets a right-sized one.
         think: false,
         keep_alive: config.keepAliveVision,
-        options: { temperature: 0.2, num_predict: 400, num_ctx: 8192 },
+        options: { temperature: 0.2, num_predict: 1200, num_ctx: 8192 },
         messages: [{ role: "user", content: prompt, images: [imageBase64] }],
       }),
       signal: AbortSignal.timeout(this.firstResponseBudget(model)),

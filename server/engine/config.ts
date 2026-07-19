@@ -32,6 +32,8 @@ export interface EngineConfig {
   factConfidence: number;
   whisperBin: string;
   whisperModel: string;
+  ttsBin: string;
+  ttsVoice: string;
   maxUploadBytes: number;
 }
 
@@ -58,6 +60,10 @@ export function loadConfig(): EngineConfig {
     factConfidence,
     whisperBin: env("MVP_WHISPER_BIN", "mlx_whisper"),
     whisperModel: env("MVP_WHISPER_MODEL", "mlx-community/whisper-large-v3-turbo"),
+    // macOS ships `say`; everywhere else espeak-ng is one package away.
+    // Piper users point MVP_TTS_BIN=piper and MVP_TTS_VOICE at a .onnx model.
+    ttsBin: env("MVP_TTS_BIN", process.platform === "darwin" ? "say" : "espeak-ng"),
+    ttsVoice: env("MVP_TTS_VOICE", ""),
     maxUploadBytes: envInt("MVP_MAX_UPLOAD_MB", 200) * 1024 * 1024,
   });
 }

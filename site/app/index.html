@@ -123,6 +123,13 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
   background: rgba(63, 226, 143, 0.12); border-left: none;
   border-right: 2px solid var(--mvp-term-green);
 }
+.app-speak {
+  align-self: flex-end; margin-left: 8px; flex-shrink: 0;
+  background: none; border: none; padding: 2px 4px; cursor: pointer;
+  font-family: var(--mvp-mono); font-size: 0.72rem; color: var(--mvp-muted);
+}
+.app-speak:hover:not(:disabled) { color: var(--mvp-term-green); }
+.app-speak:disabled { cursor: default; }
 .app-line { font-family: var(--mvp-mono); font-size: 0.82rem; line-height: 1.7; color: var(--mvp-term-text); white-space: pre-wrap; word-break: break-word; }
 .app-line--dim { color: var(--mvp-muted); }
 .app-line--ok { color: var(--mvp-term-green); }
@@ -471,9 +478,61 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     b.className = "app-msg__bubble";
     b.textContent = text;
     wrap.appendChild(b);
+    if (role === "bot") wrap.appendChild(speakButton(b));
     els.log.appendChild(wrap);
     scrollPin();
     return b;
+  }
+
+  /* ---------- speak: local TTS reads a reply aloud ----------
+     An interface voice, on loan to the shape — never presented as theirs. */
+  let speaking = null; // the one Audio allowed to play at a time
+  function speakButton(bubbleEl) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "app-speak";
+    btn.textContent = "▸ speak";
+    btn.title = "read this aloud — a voice on loan, not theirs";
+    btn.addEventListener("click", async () => {
+      const text = bubbleEl.textContent.trim();
+      if (text === "" || btn.disabled) return;
+      btn.disabled = true;
+      btn.textContent = "▸ …";
+      try {
+        const res = await fetch(`/api/companions/${state.companion.companion.id}/say`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `HTTP ${res.status}`);
+        }
+        const url = URL.createObjectURL(await res.blob());
+        speaking?.pause();
+        const audio = new Audio(url);
+        speaking = audio;
+        btn.textContent = "▸ speaking";
+        audio.addEventListener("ended", () => {
+          URL.revokeObjectURL(url);
+          btn.disabled = false;
+          btn.textContent = "▸ speak";
+        });
+        audio.addEventListener("pause", () => {
+          if (audio.ended) return;
+          URL.revokeObjectURL(url);
+          btn.disabled = false;
+          btn.textContent = "▸ speak";
+        });
+        await audio.play();
+      } catch (err) {
+        // the server's message carries the install hint verbatim — show it
+        btn.disabled = false;
+        btn.textContent = "▸ speak";
+        line(`✗ couldn't speak: ${err.message}`, "warn");
+      }
+    });
+    return btn;
   }
   function clearLog() {
     els.log.textContent = "";

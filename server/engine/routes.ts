@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { config } from "./config.ts";
 import { getDb } from "./db.ts";
@@ -7,6 +8,7 @@ import { loadMemories } from "./memories.ts";
 import { ollama } from "./ollama.ts";
 import { deleteFact } from "./memory.ts";
 import { parseProfile, readiness, updateProfile, type Readiness } from "./profile.ts";
+import { synthesize } from "./tts.ts";
 import { Broadcaster } from "./sse.ts";
 import { collapseWhitespace, sha256Hex } from "./text.ts";
 import { IngestQueue, type ArtifactRow, type Processor } from "./ingest/queue.ts";
@@ -371,6 +373,29 @@ export function createEngineRoutes(): EngineRouter {
     return json(200, { ok: true, id: fact.id });
   }
 
+  /** Stream a temp file back and remove its tmpRoot afterward — on
+   * completion or client cancel, whichever comes first. */
+  function streamAndCleanup(filePath: string, tmpRoot: string, headers: Record<string, string>): Response {
+    const file = Bun.file(filePath);
+    const size = file.size;
+    const reader = file.stream().getReader();
+    const stream = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          rmSync(tmpRoot, { recursive: true, force: true });
+          return;
+        }
+        controller.enqueue(value);
+      },
+      cancel() {
+        rmSync(tmpRoot, { recursive: true, force: true });
+      },
+    });
+    return new Response(stream, { headers: { ...headers, "Content-Length": String(size) } });
+  }
+
   async function handleExport(row: CompanionRow): Promise<Response> {
     let result: ExportResult;
     try {
@@ -379,30 +404,32 @@ export function createEngineRoutes(): EngineRouter {
       console.error(`export failed [companion ${row.id}]: ${(err as Error).message}`);
       return json(500, { ok: false, error: (err as Error).message });
     }
-    const file = Bun.file(result.zipPath);
-    const size = file.size;
-    const reader = file.stream().getReader();
-    const stream = new ReadableStream<Uint8Array>({
-      async pull(controller) {
-        const { done, value } = await reader.read();
-        if (done) {
-          controller.close();
-          rmSync(result.tmpRoot, { recursive: true, force: true });
-          return;
-        }
-        controller.enqueue(value);
-      },
-      cancel() {
-        rmSync(result.tmpRoot, { recursive: true, force: true });
-      },
+    return streamAndCleanup(result.zipPath, result.tmpRoot, {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${result.downloadName}"`,
     });
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="${result.downloadName}"`,
-        "Content-Length": String(size),
-      },
-    });
+  }
+
+  async function handleSay(row: CompanionRow, req: Request): Promise<Response> {
+    const body = await readJsonBody(req);
+    if (body instanceof Response) return body;
+    const text = typeof body.text === "string" ? body.text.trim() : "";
+    if (text.length === 0) {
+      return json(400, { ok: false, error: "text_required" });
+    }
+    if (text.length > 2000) {
+      return json(400, { ok: false, error: "text_too_long — 2000 chars is plenty to read aloud" });
+    }
+    const tmpRoot = mkdtempSync(join(tmpdir(), "mvp-say-"));
+    let wavPath: string;
+    try {
+      wavPath = await synthesize(text, tmpRoot);
+    } catch (err) {
+      rmSync(tmpRoot, { recursive: true, force: true });
+      console.error(`say failed [companion ${row.id}]: ${(err as Error).message}`);
+      return json(500, { ok: false, error: (err as Error).message });
+    }
+    return streamAndCleanup(wavPath, tmpRoot, { "Content-Type": "audio/wav" });
   }
 
   function handleDelete(row: CompanionRow, url: URL): Response {
@@ -676,6 +703,12 @@ export function createEngineRoutes(): EngineRouter {
         }
         if (rest === "/export" && req.method === "GET") {
           return handleExport(row);
+        }
+        if (rest === "/say") {
+          if (req.method !== "POST") {
+            return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "POST" });
+          }
+          return handleSay(row, req);
         }
         if (rest === "/train") {
           if (req.method !== "POST") {

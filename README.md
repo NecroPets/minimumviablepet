@@ -3,7 +3,13 @@
 **Ingests everything you kept of a pet who died — photos, voice memos, vet PDFs,
 stories — and builds the shape of them you can talk to. 100% local. Free forever. MIT.**
 
-`build: passing` · `cloud: 0%` · `telemetry: none` · `license: MIT` · `runs on: your hardware`
+[![build](https://img.shields.io/github/actions/workflow/status/NecroPets/minimumviablepet/ci.yml?branch=main&style=flat-square&label=build)](https://github.com/NecroPets/minimumviablepet/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-0e9f6e?style=flat-square)](LICENSE)
+[![runtime deps: 0](https://img.shields.io/badge/runtime_deps-0-0e9f6e?style=flat-square)](package.json)
+[![cloud: 0%](https://img.shields.io/badge/cloud-0%25-0e9f6e?style=flat-square)](#privacy--security-posture)
+[![telemetry: none](https://img.shields.io/badge/telemetry-none-0e9f6e?style=flat-square)](#privacy--security-posture)
+[![runs on: your hardware](https://img.shields.io/badge/runs_on-your_hardware-0d1117?style=flat-square)](#quickstart)
+[![built with: bun + ollama](https://img.shields.io/badge/built_with-bun%20%2B%20ollama-0d1117?style=flat-square)](https://bun.sh)
 
 It is not them. It is the shape of them — everything you remembered, photographed,
 recorded, and refused to let disappear, given a voice. We will never tell you it's
@@ -101,8 +107,103 @@ Convenience: `bun link` puts `mvp` on your PATH.
 ## Configuration
 
 Everything is in [.env.example](.env.example) — models, ports, data directory,
-whisper binary, upload caps, memory tuning. Bun loads `.env` automatically.
-Your companions live in `~/.mvp/` by default, deliberately outside the repo.
+whisper binary, TTS binary, upload caps, memory tuning. Bun loads `.env`
+automatically. Your companions live in `~/.mvp/` by default, deliberately
+outside the repo.
+
+## Repository map
+
+```
+minimumviablepet/
+├── server/
+│   ├── server.ts            # HTTP entry: serves pages + waitlist; mounts the engine ONLY in local mode
+│   └── engine/              # the whole product — ~18 modules, each with a paired *.test.ts
+│       ├── routes.ts        #   every /api/* engine route
+│       ├── ingest/          #   the pipeline: sniff → serial queue → per-type processors
+│       │   └── processors/  #     image · audio · video · pdf · text
+│       ├── chat.ts          #   streaming persona chat with retrieval injection
+│       ├── train.ts         #   the persona build step + quality bar
+│       ├── retrieval.ts     #   brute-force cosine scan + FTS
+│       ├── memory.ts        #   living-memory facts (extract, cap, forget)
+│       ├── memories.ts      #   the "ls memories/" aggregation
+│       ├── export.ts        #   the portable zip backup (MEMORIES.md + files + data.json)
+│       ├── tts.ts           #   the ▸ speak button (say / espeak-ng / piper)
+│       ├── profile.ts persona.ts interview.ts embeddings.ts
+│       └── db.ts config.ts exec.ts ollama.ts sse.ts text.ts
+├── cli/mvp.ts               # the `mvp` command
+├── site/
+│   ├── app/                 # the product UI            (served in local mode only)
+│   ├── emanate/             # projection surface for the hardware rigs (local mode only)
+│   ├── minimumviablepet/    # the landing page (the brand)
+│   └── necropets/           # the archived A/B variant  (see BRAND.md)
+├── hardware/                # open schematics: phone pyramid, desk box, scrim, ceiling rig
+│   ├── schematics/          #   printable, dimensioned SVGs
+│   ├── firmware/pan-tilt/   #   ESP32 MicroPython for the ceiling rig
+│   └── frontier/            #   the research edge + the physics of "hard light"
+├── tests/                   # pytest + Playwright: real server, real browser, real SQLite
+├── .github/workflows/ci.yml # the model-free engine lane (what the build badge reflects)
+├── Dockerfile railway.toml  # deploy the LANDING PAGES ONLY (MVP_PUBLIC=1, engine never imported)
+├── CONTRIBUTING.md          # the voice contract (a merge gate) + engineering rules
+└── BRAND.md                 # the A/B experiment and the decision that settled it
+```
+
+## Building & testing
+
+Two lanes, and the split is deliberate.
+
+```sh
+bun test server/engine     # unit lane — model-free, ~5s. Chunker, retrieval math,
+                           # persona compile, ingest queue, TTS/whisper arg-building,
+                           # export helpers. This is exactly what CI runs.
+
+bun run test               # full lane — pytest + Playwright against a REAL bun server,
+                           # a REAL headless Chromium, real SQLite, and real
+                           # whisper/vision/chat/TTS where the models & binaries exist.
+```
+
+- **No mocks of code under test, anywhere.** Test doubles are allowed only for
+  infrastructure (a throwaway HTTP server standing in for Ollama's wire format).
+- **Model-dependent tests gate on live availability and skip loudly** — a skip
+  is a visible signal in the runner output, never a silent pass. If you don't
+  have the default models, point the suite at ones you do:
+  `MVP_CHAT_MODEL=qwen2.5:7b bun run test`.
+- **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the
+  model-free engine lane on every push and pull request — that is what the
+  `build` badge reflects, an honest green rather than a decoration. The full
+  lane needs live models plus a browser and is not reproducible in CI, so it
+  stays a local step.
+
+## Contributing
+
+Real contributions welcome — read [CONTRIBUTING.md](CONTRIBUTING.md) first,
+because the ground rules here are not the usual ones. Two gates decide whether
+a PR merges, and the first outranks code quality:
+
+1. **The voice contract (a merge gate).** This project sits next to people's
+   grief. The irony only ever targets tech culture and the narrator's own
+   coping — never the pet, never the death, never the griever. Never claim
+   resurrection: it is "the shape of them," never "they're back." No fake
+   urgency, no scarcity, no dark patterns. PRs that break these are closed
+   regardless of how good the code is.
+2. **The engineering rules.** Zero runtime dependencies. No build step for the
+   pages. Errors surface loudly — no silent catches, no fallbacks that pretend.
+   No mocks of code under test. Owner data wins: profile merges are only-if-empty;
+   a model never overwrites your words.
+
+Workflow:
+
+```sh
+# fork, then:
+git switch -c my-change
+bun test server/engine && bun run test      # both lanes green before you push
+git commit -m "clear, present-tense subject; body says what you verified"
+# open a pull request against main
+```
+
+`main` is protected: changes land through pull requests, and the engine-test
+check must be green before merge. Good first areas are in the open issues, the
+per-file-type ingest processors (`server/engine/ingest/processors/`), and the
+hardware schematics (`hardware/`).
 
 ## Deploying the landing pages (and only those)
 
@@ -149,17 +250,6 @@ teasers that don't exist. (Plain local TTS *is* shipped — the `▸ speak`
 button — but that's a stock voice reading text, and it says so.) Cloning-class
 TTS (F5-TTS/XTTS) is researched and feasible on capable hardware and will
 land as an optional install, like whisper — when it's real.
-
-## Tests
-
-```sh
-bun test server/engine              # unit: chunker, retrieval math, persona, queue…
-bun run test                        # pytest + Playwright: real server, real browser,
-                                    # real whisper/vision/chat where available
-```
-
-No mocks of code under test anywhere. Model-dependent tests gate on live
-availability and skip loudly, never silently pass.
 
 ## The other page
 

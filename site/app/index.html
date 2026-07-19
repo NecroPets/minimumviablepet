@@ -91,6 +91,25 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
   border-radius: var(--mvp-r-lg); overflow: hidden;
   box-shadow: 0 14px 40px rgba(20, 22, 27, 0.16);
 }
+
+/* ---------- rig (embodiment): the photo cutout, animated ---------- */
+.app-rig {
+  flex: none; width: 200px; align-self: center;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.app-rig__frame {
+  width: 100%; border-radius: var(--mvp-r-lg); overflow: hidden;
+  background: var(--mvp-paper-2); border: 1px solid var(--mvp-line);
+}
+.app-rig canvas { display: block; width: 100%; height: auto; }
+.app-rig__label {
+  margin: 0; font-family: var(--mvp-mono); font-size: 0.68rem; line-height: 1.4;
+  color: var(--mvp-muted); text-align: center;
+}
+@media (max-width: 720px) {
+  .app-main { flex-direction: column; overflow-y: auto; }
+  .app-rig { width: 120px; }
+}
 .app-term__bar {
   display: flex; align-items: center; gap: 10px; flex: none;
   padding: 10px 14px; border-bottom: 1px solid var(--mvp-terminal-line);
@@ -293,6 +312,10 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
 </header>
 
 <main class="app-main">
+  <aside class="app-rig" id="app-rig" hidden aria-label="Companion, rigged from a photo">
+    <div class="app-rig__frame"><canvas id="app-rig-canvas" width="1" height="1"></canvas></div>
+    <p class="app-rig__label" id="app-rig-label"></p>
+  </aside>
   <section class="app-term" aria-label="MinimumViablePet terminal">
     <div class="app-term__bar">
       <span class="app-term__dots" aria-hidden="true"><i></i><i></i><i></i></span>
@@ -395,6 +418,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     memTimeline: $("app-mem-timeline"), memExportBtn: $("app-mem-export-btn"),
     memConfirmName: $("app-mem-confirm-name"), memConfirmInput: $("app-mem-confirm-input"),
     memDeleteBtn: $("app-mem-delete-btn"),
+    rig: $("app-rig"), rigCanvas: $("app-rig-canvas"), rigLabel: $("app-rig-label"),
   };
 
   const state = {
@@ -539,6 +563,276 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     state.artifactLines.clear();
   }
 
+  /* ---------- rig (embodiment): the photo cutout, animated ----------
+     A vanilla canvas 2D renderer that warps the still cutout in N
+     horizontal slices — a per-slice x-offset (sway/lean) plus a global
+     vertical breathing scale anchored at the bottom (paws stay planted) —
+     driven by the persona and the real chat state machine below. No mesh,
+     no bones, no library: an honest slice warp, per docs/EMBODIMENT-PLAN.md
+     §6. Real blink and independent ear-swivel need eye/ear anchors this
+     whole-cutout warp doesn't have — that's Phase 2, not faked here. */
+  const RIG_SLICES = 48;
+  const RIG_BREATH_AMP = 0.02;                  // ~2% vertical scale at rest
+  const RIG_BREATH_RATE = (2 * Math.PI) / 4.2;  // rad/s at energy_scalar 0.5
+  const RIG_MAX_SWAY = 0.07;                    // fraction of width, clamped
+  const RIG_HEAD_EXTRA_SWAY = 0.35;             // extra look-toward on head rows
+  const RIG_DRIFT_AMP = 0.012;
+  const RIG_POINTER_EASE_TAU = 0.18;            // seconds — ease, don't snap
+  const RIG_PARAM_EASE_TAU = 0.6;
+  const RIG_TOKEN_KICK = 0.018;
+  const RIG_TOKEN_DECAY_TAU = 0.5;
+  const RIG_REACTION_DURATION = { head_tilt: 900, ear_perk: 650, lean: 1100 };
+  const RIG_STATE_PARAMS = {
+    idle:         { breathAmpMul: 1.00, breathRateMul: 1.00, breathBaseline: 1.000, driftMul: 1.00, lookGainMul: 1.00 },
+    listening:    { breathAmpMul: 0.85, breathRateMul: 1.10, breathBaseline: 1.000, driftMul: 0.30, lookGainMul: 1.20 },
+    thinking:     { breathAmpMul: 0.75, breathRateMul: 0.85, breathBaseline: 1.000, driftMul: 0.15, lookGainMul: 0.90 },
+    responding:   { breathAmpMul: 1.00, breathRateMul: 1.15, breathBaseline: 1.000, driftMul: 0.50, lookGainMul: 1.00 },
+    acknowledged: { breathAmpMul: 1.15, breathRateMul: 1.25, breathBaseline: 1.000, driftMul: 0.40, lookGainMul: 1.00 },
+    settling:     { breathAmpMul: 0.40, breathRateMul: 0.40, breathBaseline: 0.985, driftMul: 0.05, lookGainMul: 0.25 },
+  };
+  const rigClamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  const rig = {
+    descriptor: null, img: null, ctx: null, dpr: 1, ready: false,
+    state: "idle", pendingSettle: false, reactions: [],
+    cur: { ...RIG_STATE_PARAMS.idle },
+    easedSway: 0, tokenPulse: 0, pointerNorm: 0, nextFidgetAt: 0,
+    startTs: 0, lastTs: 0, raf: 0, easeTimer: null, pointerHandler: null,
+  };
+
+  function rigEnergy() {
+    return rig.descriptor?.persona?.energy_scalar ?? 0.5;
+  }
+
+  function rigFireReaction(type, ampMul) {
+    if (!rig.descriptor || !(rig.descriptor.persona.reactions || []).includes(type)) return;
+    const energy = rigEnergy();
+    // energy_scalar sets reaction briskness: higher energy, shorter/snappier pulse
+    const duration = (RIG_REACTION_DURATION[type] ?? 800) / (0.7 + 0.6 * energy);
+    rig.reactions.push({
+      type, start: performance.now(), duration,
+      amp: (ampMul ?? 1) * (0.75 + 0.5 * energy),
+      dir: Math.random() < 0.5 ? -1 : 1,
+    });
+    if (rig.reactions.length > 8) rig.reactions.shift();
+  }
+
+  /** The driver: the only place chat/persona state touches the body.
+   * idle -> listening (user types) -> thinking (send, awaiting first token)
+   * -> responding (streaming) -> acknowledged (memory written) -> idle, or
+   * -> settling (goodnight detected on the outgoing message). */
+  function rigSetState(next) {
+    if (!rig.ready) return;
+    rig.state = next;
+    if (rig.easeTimer) { clearTimeout(rig.easeTimer); rig.easeTimer = null; }
+    if (next === "listening") {
+      rigFireReaction("ear_perk", 0.8);
+    } else if (next === "acknowledged") {
+      const pool = rig.descriptor.persona.reactions || [];
+      if (pool.length) rigFireReaction(pool[Math.floor(Math.random() * pool.length)], 1);
+      rig.easeTimer = setTimeout(() => {
+        rig.easeTimer = null;
+        rigSetState(rig.pendingSettle ? "settling" : "idle");
+      }, 1300);
+    }
+  }
+
+  // ---- chat hooks (minimal, called from streamTurn/the form submit below) ----
+  function rigOnUserSubmit(text) {
+    if (!rig.ready) return;
+    const goodnight = /\b(goodnight|good night|night night|nighty)\b/i.test(text);
+    rig.pendingSettle = goodnight;
+    rigSetState(goodnight ? "settling" : "listening");
+  }
+  function rigOnTurnStart() {
+    if (!rig.ready || rig.pendingSettle) return; // already easing to sleep — don't perk back up
+    rigSetState("thinking");
+  }
+  function rigOnFirstDelta() {
+    if (!rig.ready || rig.pendingSettle) return;
+    rigSetState("responding");
+  }
+  function rigOnToken() {
+    if (!rig.ready) return;
+    // subtle motion synced loosely to token arrival — NOT lip-sync, a cat doesn't talk
+    const sign = Math.random() < 0.5 ? -1 : 1;
+    rig.tokenPulse = rigClamp(
+      rig.tokenPulse + sign * RIG_TOKEN_KICK * (0.4 + Math.random() * 0.6),
+      -RIG_TOKEN_KICK * 2, RIG_TOKEN_KICK * 2,
+    );
+  }
+  function rigOnTurnDone(newFacts) {
+    if (!rig.ready) return;
+    if (rig.pendingSettle) rigSetState("settling");
+    else if (newFacts > 0) rigSetState("acknowledged");
+    else rigSetState("idle");
+  }
+  function rigOnTurnAborted() {
+    if (!rig.ready) return;
+    rig.pendingSettle = false;
+    rigSetState("idle");
+  }
+
+  function rigOnPointerMove(e) {
+    const rect = els.rigCanvas.getBoundingClientRect();
+    if (rect.width === 0) return;
+    rig.pointerNorm = (e.clientX - (rect.left + rect.width / 2)) / (rect.width / 2);
+  }
+
+  function rigDraw(breath, swayCurrent, activeReactions) {
+    const { bounds, regions } = rig.descriptor;
+    const ctx = rig.ctx;
+    ctx.setTransform(rig.dpr, 0, 0, rig.dpr, 0, 0);
+    ctx.clearRect(0, 0, bounds.w, bounds.h);
+    const img = rig.img;
+    const srcW = img.naturalWidth, srcH = img.naturalHeight;
+    const sliceH = bounds.h / RIG_SLICES;
+    const srcSliceH = srcH / RIG_SLICES;
+    const headBottom = regions.head?.bottom ?? 0.42;
+    const earsBottom = regions.ears?.bottom ?? 0.10;
+    for (let i = 0; i < RIG_SLICES; i++) {
+      const y0 = i * sliceH, y1 = (i + 1) * sliceH;
+      // row position in the ORIGINAL (unbreathed) frame — stable so region
+      // membership and the sway ramp don't wobble with the breath cycle
+      const rowCenter = (y0 + y1) / 2 / bounds.h; // 0 top .. 1 bottom
+      let offsetX = swayCurrent * (1 - rowCenter) * bounds.w; // ramps 0 at bottom -> full at top
+      if (rowCenter <= headBottom) offsetX += swayCurrent * RIG_HEAD_EXTRA_SWAY * bounds.w;
+      let destYTop = bounds.h - (bounds.h - y0) * breath; // anchored at the bottom
+      let destYBot = bounds.h - (bounds.h - y1) * breath;
+      for (const r of activeReactions) {
+        if (r.type === "lean") {
+          offsetX += r.env * r.amp * 0.05 * bounds.w * (1 - rowCenter);
+        } else if (r.type === "head_tilt" && rowCenter <= headBottom) {
+          offsetX += r.env * r.amp * 0.035 * bounds.w * r.dir;
+        } else if (r.type === "ear_perk" && rowCenter <= earsBottom) {
+          const lift = r.env * r.amp * 0.06 * bounds.h;
+          destYTop -= lift;
+          destYBot -= lift;
+        }
+      }
+      ctx.drawImage(img, 0, i * srcSliceH, srcW, srcSliceH, offsetX, destYTop, bounds.w, destYBot - destYTop);
+    }
+  }
+
+  function rigTick(ts) {
+    if (!rig.ready) return;
+    if (!rig.startTs) { rig.startTs = ts; rig.lastTs = ts; }
+    const dt = Math.min(0.1, (ts - rig.lastTs) / 1000 || 0.016);
+    rig.lastTs = ts;
+    const t = (ts - rig.startTs) / 1000;
+    const energy = rigEnergy();
+
+    const target = RIG_STATE_PARAMS[rig.state] || RIG_STATE_PARAMS.idle;
+    const paramAlpha = 1 - Math.exp(-dt / RIG_PARAM_EASE_TAU);
+    for (const k of Object.keys(target)) rig.cur[k] += (target[k] - rig.cur[k]) * paramAlpha;
+
+    // idle fidgets: occasional persona-weighted reaction, frequency scaled by energy_scalar
+    if (rig.state === "idle" && ts >= rig.nextFidgetAt) {
+      const pool = rig.descriptor.persona.reactions || [];
+      if (pool.length) rigFireReaction(pool[Math.floor(Math.random() * pool.length)], 0.55);
+      const fMin = 9000 - 5000 * energy, fMax = 16000 - 6000 * energy;
+      rig.nextFidgetAt = ts + fMin + Math.random() * (fMax - fMin);
+    }
+
+    // breath: subtle periodic vertical scale, anchored at the bottom, rate scaled by energy
+    const breathAmp = RIG_BREATH_AMP * rig.cur.breathAmpMul;
+    const breathRate = RIG_BREATH_RATE * (0.7 + 0.6 * energy) * rig.cur.breathRateMul;
+    const breath = rig.cur.breathBaseline + breathAmp * Math.sin(t * breathRate);
+
+    // sway/lean: eased look-toward-cursor + gentle idle drift, clamped small
+    const targetSway = rigClamp(rig.pointerNorm, -1, 1) * RIG_MAX_SWAY * rig.cur.lookGainMul;
+    rig.easedSway += (targetSway - rig.easedSway) * (1 - Math.exp(-dt / RIG_POINTER_EASE_TAU));
+    const drift = RIG_DRIFT_AMP * rig.cur.driftMul * (Math.sin(t * 0.37) * 0.6 + Math.sin(t * 0.53 + 1.3) * 0.4);
+    rig.tokenPulse *= Math.exp(-dt / RIG_TOKEN_DECAY_TAU);
+    const swayCurrent = rigClamp(rig.easedSway + drift + rig.tokenPulse, -RIG_MAX_SWAY * 1.4, RIG_MAX_SWAY * 1.4);
+
+    const now = performance.now();
+    const active = [];
+    for (const r of rig.reactions) {
+      const frac = (now - r.start) / r.duration;
+      if (frac >= 1) continue;
+      active.push({ ...r, env: Math.sin(Math.PI * rigClamp(frac, 0, 1)) });
+    }
+    rig.reactions = active;
+
+    rigDraw(breath, swayCurrent, active);
+    rig.raf = requestAnimationFrame(rigTick);
+  }
+
+  function rigResizeCanvas() {
+    const { bounds } = rig.descriptor;
+    rig.dpr = Math.min(2, window.devicePixelRatio || 1);
+    els.rigCanvas.width = Math.round(bounds.w * rig.dpr);
+    els.rigCanvas.height = Math.round(bounds.h * rig.dpr);
+    els.rigCanvas.style.aspectRatio = `${bounds.w} / ${bounds.h}`;
+  }
+
+  /** Leaving a view tears this down: cancel the rAF loop, drop the pointer
+   * listener, hide the panel. Mirrors route()'s other live-work teardown. */
+  function teardownRig() {
+    if (rig.raf) cancelAnimationFrame(rig.raf);
+    if (rig.easeTimer) clearTimeout(rig.easeTimer);
+    if (rig.pointerHandler) window.removeEventListener("pointermove", rig.pointerHandler);
+    rig.raf = 0; rig.easeTimer = null; rig.pointerHandler = null;
+    rig.ready = false; rig.descriptor = null; rig.img = null;
+    rig.state = "idle"; rig.pendingSettle = false; rig.reactions = [];
+    rig.startTs = 0; rig.lastTs = 0; rig.easedSway = 0; rig.tokenPulse = 0; rig.pointerNorm = 0;
+    els.rig.hidden = true;
+  }
+
+  /** Fetch the rig descriptor for a companion; a 404 (no rig yet) leaves the
+   * app exactly as it is today — no canvas, nothing extra. */
+  async function loadRig(companionId, my) {
+    let body;
+    try {
+      const res = await fetch(`/api/companions/${companionId}/rig`);
+      if (!res.ok) return;
+      body = await res.json();
+    } catch {
+      return;
+    }
+    if (my !== epoch || !body?.ok || !body.rig) return;
+    const descriptor = body.rig;
+    const img = new Image();
+    img.src = descriptor.cutout_url;
+    try {
+      await img.decode();
+    } catch {
+      return; // cutout missing/corrupt — degrade to no rig, same as a 404
+    }
+    if (my !== epoch) return;
+
+    rig.descriptor = descriptor;
+    rig.img = img;
+    rig.ctx = els.rigCanvas.getContext("2d");
+    rig.state = "idle";
+    rig.pendingSettle = false;
+    rig.reactions = [];
+    rig.cur = { ...RIG_STATE_PARAMS.idle };
+    rig.easedSway = 0; rig.tokenPulse = 0; rig.pointerNorm = 0;
+    rig.startTs = 0; rig.lastTs = 0;
+    // first idle fidget only after a settling-in delay — no twitch on frame one
+    rig.nextFidgetAt = performance.now() + 4000 + Math.random() * 4000;
+    rigResizeCanvas();
+    const name = state.companion?.companion?.name;
+    els.rigLabel.textContent = name
+      ? `${name}'s photo, rigged — the shape of them moving, not them.`
+      : "their photo, rigged — the shape of them moving, not them.";
+    els.rig.hidden = false;
+    rig.ready = true;
+    rig.pointerHandler = rigOnPointerMove;
+    window.addEventListener("pointermove", rig.pointerHandler);
+    rig.raf = requestAnimationFrame(rigTick);
+  }
+
+  // Test-only seam: drives the state machine directly so Playwright can
+  // exercise the driver without a live model (chat is model-gated; the rig
+  // itself isn't). Harmless in production — no user data crosses it.
+  window.__mvpRigTestHook = {
+    setState: (s) => rigSetState(s),
+    getState: () => rig.state,
+  };
+
   /* ---------- status pill / engine poller ---------- */
   function setStatus(mode, label) {
     els.status.setAttribute("data-mode", mode);
@@ -575,6 +869,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     state.ingesting = 0;
     toggleDrawer(false);
     toggleMemoriesDrawer(false);
+    teardownRig();
 
     const m = location.hash.match(/^#\/c\/(.+)$/);
     if (!m) {
@@ -700,6 +995,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     els.memoriesBtn.hidden = false;
     clearLog();
     followIngest(id, my);
+    loadRig(id, my); // fire-and-forget: 404 (no rig yet) leaves the view untouched
 
     const c = res.companion;
     const name = c.name || "them";
@@ -786,6 +1082,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     if (state.streaming || !state.conversationId) return;
     const my = epoch;
     state.streaming = true;
+    rigOnTurnStart(); // rig hook: listening -> thinking, awaiting the first token
     setInput(false);
     els.typing.classList.add("is-on");
     els.stop.hidden = false;
@@ -813,10 +1110,13 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
             els.typing.classList.remove("is-on");
             setStatus("local", "live: localhost");
             botBubble = bubble("bot", "");
+            rigOnFirstDelta(); // rig hook: thinking -> responding
           }
           botBubble.textContent += data.text;
+          rigOnToken(); // rig hook: a small nudge per token — not lip-sync
           scrollPin();
         } else if (event === "done") {
+          rigOnTurnDone(data.memory?.new_facts ?? 0); // rig hook: acknowledged/settling/idle
           if (data.memory && data.memory.new_facts > 0) {
             const note = document.createElement("div");
             note.className = "app-memnote";
@@ -840,6 +1140,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
         }
       }
     } catch (err) {
+      rigOnTurnAborted(); // rig hook: error/abort -> idle
       if (ctrl.signal.aborted) {
         if (botBubble && my === epoch) botBubble.textContent += " · interrupted";
       } else if (my === epoch) {
@@ -868,6 +1169,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     e.preventDefault();
     const text = els.field.value.trim();
     if (!text || state.streaming) return;
+    rigOnUserSubmit(text);
     bubble("user", text);
     els.field.value = "";
     streamTurn({ message: text });

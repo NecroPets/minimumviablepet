@@ -571,12 +571,12 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
      no bones, no library: an honest slice warp, per docs/EMBODIMENT-PLAN.md
      §6. Real blink and independent ear-swivel need eye/ear anchors this
      whole-cutout warp doesn't have — that's Phase 2, not faked here. */
-  const RIG_SLICES = 48;
+  const RIG_SLICES = 72;
   const RIG_BREATH_AMP = 0.02;                  // ~2% vertical scale at rest
   const RIG_BREATH_RATE = (2 * Math.PI) / 4.2;  // rad/s at energy_scalar 0.5
-  const RIG_MAX_SWAY = 0.07;                    // fraction of width, clamped
-  const RIG_HEAD_EXTRA_SWAY = 0.35;             // extra look-toward on head rows
-  const RIG_DRIFT_AMP = 0.012;
+  const RIG_MAX_SWAY = 0.06;                    // fraction of width, clamped
+  const RIG_HEAD_EXTRA_SWAY = 0.22;             // extra look-toward, feathered over the head
+  const RIG_DRIFT_AMP = 0.010;
   const RIG_POINTER_EASE_TAU = 0.18;            // seconds — ease, don't snap
   const RIG_PARAM_EASE_TAU = 0.6;
   const RIG_TOKEN_KICK = 0.018;
@@ -679,8 +679,16 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     rig.pointerNorm = (e.clientX - (rect.left + rect.width / 2)) / (rect.width / 2);
   }
 
+  // Smooth 0..1 ramp (cubic), zero-derivative at both ends. Used for every
+  // per-row influence so adjacent slices never differ abruptly — a hard
+  // region cutoff was tearing the top of the head off the rest of the body.
+  function rigSmoothstep(a, b, x) {
+    const t = rigClamp((x - a) / (b - a), 0, 1);
+    return t * t * (3 - 2 * t);
+  }
+
   function rigDraw(breath, swayCurrent, activeReactions) {
-    const { bounds, regions } = rig.descriptor;
+    const { bounds } = rig.descriptor;
     const ctx = rig.ctx;
     ctx.setTransform(rig.dpr, 0, 0, rig.dpr, 0, 0);
     ctx.clearRect(0, 0, bounds.w, bounds.h);
@@ -688,29 +696,37 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     const srcW = img.naturalWidth, srcH = img.naturalHeight;
     const sliceH = bounds.h / RIG_SLICES;
     const srcSliceH = srcH / RIG_SLICES;
-    const headBottom = regions.head?.bottom ?? 0.42;
-    const earsBottom = regions.ears?.bottom ?? 0.10;
+    // 1px of vertical dest overlap hides sub-pixel seams between slices
+    const overlap = Math.max(1, (bounds.h / RIG_SLICES) * 0.5);
     for (let i = 0; i < RIG_SLICES; i++) {
       const y0 = i * sliceH, y1 = (i + 1) * sliceH;
-      // row position in the ORIGINAL (unbreathed) frame — stable so region
-      // membership and the sway ramp don't wobble with the breath cycle
+      // row position in the ORIGINAL (unbreathed) frame — stable so the
+      // weights and the sway ramp don't wobble with the breath cycle
       const rowCenter = (y0 + y1) / 2 / bounds.h; // 0 top .. 1 bottom
-      let offsetX = swayCurrent * (1 - rowCenter) * bounds.w; // ramps 0 at bottom -> full at top
-      if (rowCenter <= headBottom) offsetX += swayCurrent * RIG_HEAD_EXTRA_SWAY * bounds.w;
-      let destYTop = bounds.h - (bounds.h - y0) * breath; // anchored at the bottom
+      // continuous weights, NOT hard region membership:
+      //  headW: 1 over the head, feathering to 0 through the neck (~0.30..0.52)
+      //  earW:  peaks at the very top (ears/skull), feathering to 0 by ~0.28
+      const headW = 1 - rigSmoothstep(0.30, 0.52, rowCenter);
+      const earW = 1 - rigSmoothstep(0.02, 0.28, rowCenter);
+      let offsetX = swayCurrent * (1 - rowCenter) * bounds.w;        // ramps 0 bottom -> full top
+      offsetX += swayCurrent * RIG_HEAD_EXTRA_SWAY * bounds.w * headW; // extra look, feathered over the head
+      let destYTop = bounds.h - (bounds.h - y0) * breath;           // anchored at the bottom
       let destYBot = bounds.h - (bounds.h - y1) * breath;
       for (const r of activeReactions) {
         if (r.type === "lean") {
           offsetX += r.env * r.amp * 0.05 * bounds.w * (1 - rowCenter);
-        } else if (r.type === "head_tilt" && rowCenter <= headBottom) {
-          offsetX += r.env * r.amp * 0.035 * bounds.w * r.dir;
-        } else if (r.type === "ear_perk" && rowCenter <= earsBottom) {
-          const lift = r.env * r.amp * 0.06 * bounds.h;
+        } else if (r.type === "head_tilt") {
+          offsetX += r.env * r.amp * 0.03 * bounds.w * r.dir * headW;
+        } else if (r.type === "ear_perk") {
+          // feathered lift: the top rises most, tapering smoothly into the
+          // head so nothing detaches (Phase 2 replaces this whole-band lift
+          // with real ear-tip articulation from keypoints)
+          const lift = r.env * r.amp * 0.022 * bounds.h * earW;
           destYTop -= lift;
           destYBot -= lift;
         }
       }
-      ctx.drawImage(img, 0, i * srcSliceH, srcW, srcSliceH, offsetX, destYTop, bounds.w, destYBot - destYTop);
+      ctx.drawImage(img, 0, i * srcSliceH, srcW, srcSliceH, offsetX, destYTop, bounds.w, destYBot - destYTop + overlap);
     }
   }
 

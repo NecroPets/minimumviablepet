@@ -587,20 +587,44 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
   const RIG_TOKEN_DECAY_TAU = 0.5;
   const RIG_REACTION_DURATION = { head_tilt: 900, ear_perk: 650, lean: 1100 };
   const RIG_STATE_PARAMS = {
-    idle:         { breathAmpMul: 1.00, breathRateMul: 1.00, breathBaseline: 1.000, driftMul: 1.00, lookGainMul: 1.00 },
-    listening:    { breathAmpMul: 0.85, breathRateMul: 1.10, breathBaseline: 1.000, driftMul: 0.30, lookGainMul: 1.20 },
-    thinking:     { breathAmpMul: 0.75, breathRateMul: 0.85, breathBaseline: 1.000, driftMul: 0.15, lookGainMul: 0.90 },
-    responding:   { breathAmpMul: 1.00, breathRateMul: 1.15, breathBaseline: 1.000, driftMul: 0.50, lookGainMul: 1.00 },
-    acknowledged: { breathAmpMul: 1.15, breathRateMul: 1.25, breathBaseline: 1.000, driftMul: 0.40, lookGainMul: 1.00 },
-    settling:     { breathAmpMul: 0.40, breathRateMul: 0.40, breathBaseline: 0.985, driftMul: 0.05, lookGainMul: 0.25 },
+    idle:         { breathAmpMul: 1.00, breathRateMul: 1.00, breathBaseline: 1.000, driftMul: 1.00, lookGainMul: 1.00, parallaxGainMul: 1.00 },
+    listening:    { breathAmpMul: 0.85, breathRateMul: 1.10, breathBaseline: 1.000, driftMul: 0.30, lookGainMul: 1.20, parallaxGainMul: 1.15 },
+    thinking:     { breathAmpMul: 0.75, breathRateMul: 0.85, breathBaseline: 1.000, driftMul: 0.15, lookGainMul: 0.90, parallaxGainMul: 0.85 },
+    responding:   { breathAmpMul: 1.00, breathRateMul: 1.15, breathBaseline: 1.000, driftMul: 0.50, lookGainMul: 1.00, parallaxGainMul: 1.00 },
+    acknowledged: { breathAmpMul: 1.15, breathRateMul: 1.25, breathBaseline: 1.000, driftMul: 0.40, lookGainMul: 1.00, parallaxGainMul: 1.05 },
+    settling:     { breathAmpMul: 0.40, breathRateMul: 0.40, breathBaseline: 0.985, driftMul: 0.05, lookGainMul: 0.25, parallaxGainMul: 0.35 },
   };
   const rigClamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+  // ---------- P2: depth parallax (WebGL) ----------
+  // docs/EMANATION-ENGINE-PLAN.md §4.3/§4.4. When a rig descriptor carries a
+  // depth_url (a grayscale PNG, near=bright(255)/far=dark(0), same dims as
+  // the cutout) AND the browser can do WebGL with vertex texture fetch, the
+  // portrait gets real volumetric parallax instead of the flat slice-warp: a
+  // textured grid mesh, displaced per-vertex by depth * a small eased
+  // viewpoint offset, so near geometry (bright depth) moves more than far
+  // geometry — present in space, not a photo on a stick. Amplitudes are kept
+  // small and clamped ON PURPOSE (RIG_PARALLAX_MAX) — depth parallax
+  // stretches badly at silhouette/edge discontinuities if pushed too far,
+  // and the goal is gentle presence, never a funhouse warp. No depth_url,
+  // no WebGL, no vertex texture fetch, or any GL failure -> silently keeps
+  // the slice-warp above; same honest-degradation contract as the rest of
+  // the rig, never a blank canvas.
+  const RIG_GL_GRID_COLS = 64;
+  const RIG_GL_GRID_ROWS = 128;
+  const RIG_PARALLAX_MAX = 0.058;           // clamp: fraction of clip-space half-width (~2.9% of canvas width) at most
+  const RIG_PARALLAX_POINTER_GAIN = 0.050;  // eased-cursor contribution to the viewpoint vector
+  const RIG_PARALLAX_DRIFT_AMP = 0.018;     // idle Lissajous wander amplitude
+  const RIG_PARALLAX_EASE_TAU = 0.22;       // seconds — ease, don't snap (mirrors RIG_POINTER_EASE_TAU)
+  const RIG_PARALLAX_TOKEN_GAIN = 0.5;      // reuses rig.tokenPulse (the same chat-token nudge), softened for the GL surface
+
   const rig = {
     descriptor: null, img: null, ctx: null, dpr: 1, ready: false,
+    mode: "2d", gl: null, // mode: "2d" (slice-warp, ctx set) or "gl" (depth parallax, gl set)
     state: "idle", pendingSettle: false, reactions: [],
     cur: { ...RIG_STATE_PARAMS.idle },
-    easedSway: 0, tokenPulse: 0, pointerNorm: 0, nextFidgetAt: 0,
+    easedSway: 0, tokenPulse: 0, pointerNorm: 0, pointerNormY: 0, nextFidgetAt: 0,
+    glEasedX: 0, glEasedY: 0,
     startTs: 0, lastTs: 0, raf: 0, easeTimer: null, pointerHandler: null,
   };
 
@@ -679,8 +703,9 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
 
   function rigOnPointerMove(e) {
     const rect = els.rigCanvas.getBoundingClientRect();
-    if (rect.width === 0) return;
+    if (rect.width === 0 || rect.height === 0) return;
     rig.pointerNorm = (e.clientX - (rect.left + rect.width / 2)) / (rect.width / 2);
+    rig.pointerNormY = (e.clientY - (rect.top + rect.height / 2)) / (rect.height / 2);
   }
 
   // Smooth 0..1 ramp (cubic), zero-derivative at both ends. Used for every
@@ -734,6 +759,176 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     }
   }
 
+  /** Build an interleaved [x,y,u,v] grid mesh in clip space (-1..1) with
+   * matching 0..1 UVs, plus a triangle index list. Resolution-independent —
+   * DPR/canvas size only matter at gl.viewport time, not here. */
+  function rigGLBuildMesh(cols, rows) {
+    const verts = new Float32Array((cols + 1) * (rows + 1) * 4);
+    let vi = 0;
+    for (let j = 0; j <= rows; j++) {
+      const v = j / rows;
+      const y = 1 - 2 * v; // row 0 (top of image) -> clip y=+1 (top of screen)
+      for (let i = 0; i <= cols; i++) {
+        const u = i / cols;
+        verts[vi++] = -1 + 2 * u; verts[vi++] = y; verts[vi++] = u; verts[vi++] = v;
+      }
+    }
+    const indices = new Uint16Array(cols * rows * 6);
+    let ii = 0;
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < cols; i++) {
+        const a = j * (cols + 1) + i, b = a + 1, c = a + (cols + 1), d = c + 1;
+        indices[ii++] = a; indices[ii++] = b; indices[ii++] = c;
+        indices[ii++] = b; indices[ii++] = d; indices[ii++] = c;
+      }
+    }
+    return { verts, indices };
+  }
+
+  // Depth is sampled in the VERTEX shader (needs real vertex texture fetch —
+  // rigGLSetup gates on it). Displacement is depth * viewpoint offset, so
+  // near (bright) vertices move more than far (dark) ones: real parallax,
+  // not a warp. Breath anchors the bottom (paws stay planted), same as the
+  // slice-warp. Fragment discards fully-transparent cutout pixels and
+  // outputs premultiplied alpha so the canvas background stays honestly
+  // transparent, no fringing.
+  const RIG_GL_VERTEX_SRC = `
+    attribute vec2 aPos;
+    attribute vec2 aUV;
+    uniform vec2 uParallax;
+    uniform float uBreath;
+    uniform sampler2D uDepth;
+    varying vec2 vUV;
+    void main() {
+      vUV = aUV;
+      float depth = texture2D(uDepth, aUV).r;
+      float y = -1.0 + (aPos.y + 1.0) * uBreath;
+      gl_Position = vec4(aPos.x + uParallax.x * depth, y + uParallax.y * depth, 0.0, 1.0);
+    }`;
+  const RIG_GL_FRAGMENT_SRC = `
+    precision mediump float;
+    varying vec2 vUV;
+    uniform sampler2D uCutout;
+    void main() {
+      vec4 c = texture2D(uCutout, vUV);
+      if (c.a < 0.004) discard;
+      gl_FragColor = vec4(c.rgb * c.a, c.a);
+    }`;
+
+  /** Try to stand up the WebGL parallax pipeline; returns null on ANY
+   * failure (no WebGL, no vertex texture fetch, shader compile/link error)
+   * so the caller falls back to the slice-warp — never throws. */
+  function rigGLSetup(cutoutImg, depthImg) {
+    try {
+      const attrs = { alpha: true, antialias: true, preserveDrawingBuffer: true };
+      const gl = els.rigCanvas.getContext("webgl2", attrs) || els.rigCanvas.getContext("webgl", attrs);
+      if (!gl) return null;
+      // depth is sampled in the VERTEX shader — needs real vertex texture
+      // fetch support; software/old GL stacks can report zero here, and
+      // that's exactly the case this falls back to the slice-warp for.
+      if (gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS) < 1) return null;
+
+      const compile = (type, src) => {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+          console.error("rig GL shader error:", gl.getShaderInfoLog(s));
+          return null;
+        }
+        return s;
+      };
+      const vs = compile(gl.VERTEX_SHADER, RIG_GL_VERTEX_SRC);
+      const fs = compile(gl.FRAGMENT_SHADER, RIG_GL_FRAGMENT_SRC);
+      if (!vs || !fs) return null;
+      const program = gl.createProgram();
+      gl.attachShader(program, vs);
+      gl.attachShader(program, fs);
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        console.error("rig GL link error:", gl.getProgramInfoLog(program));
+        return null;
+      }
+
+      const { verts, indices } = rigGLBuildMesh(RIG_GL_GRID_COLS, RIG_GL_GRID_ROWS);
+      const vbo = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+      gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+      const ibo = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+
+      const makeTexture = (img) => {
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        // NPOT-safe params — the cutout/depth are 365x780, not power-of-two
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+        return tex;
+      };
+      const cutoutTex = makeTexture(cutoutImg);
+      const depthTex = makeTexture(depthImg);
+
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // premultiplied, matches the fragment shader's output
+
+      return {
+        ctx: gl, program,
+        vbo, ibo, indexCount: indices.length,
+        cutoutTex, depthTex,
+        aPos: gl.getAttribLocation(program, "aPos"),
+        aUV: gl.getAttribLocation(program, "aUV"),
+        uParallax: gl.getUniformLocation(program, "uParallax"),
+        uBreath: gl.getUniformLocation(program, "uBreath"),
+        uCutout: gl.getUniformLocation(program, "uCutout"),
+        uDepth: gl.getUniformLocation(program, "uDepth"),
+      };
+    } catch (err) {
+      console.error("rig GL setup failed, falling back to the slice-warp:", err);
+      return null;
+    }
+  }
+
+  function rigGLDraw(breath, px, py) {
+    const g = rig.gl, gl = g.ctx;
+    gl.viewport(0, 0, els.rigCanvas.width, els.rigCanvas.height);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.useProgram(g.program);
+    gl.uniform2f(g.uParallax, px, py);
+    gl.uniform1f(g.uBreath, breath);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, g.cutoutTex);
+    gl.uniform1i(g.uCutout, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, g.depthTex);
+    gl.uniform1i(g.uDepth, 1);
+    gl.bindBuffer(gl.ARRAY_BUFFER, g.vbo);
+    gl.enableVertexAttribArray(g.aPos);
+    gl.vertexAttribPointer(g.aPos, 2, gl.FLOAT, false, 16, 0);
+    gl.enableVertexAttribArray(g.aUV);
+    gl.vertexAttribPointer(g.aUV, 2, gl.FLOAT, false, 16, 8);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.ibo);
+    gl.drawElements(gl.TRIANGLES, g.indexCount, gl.UNSIGNED_SHORT, 0);
+  }
+
+  /** Drop the WebGL context deterministically (rather than waiting on GC)
+   * and hand back a pristine, context-free canvas node — a <canvas> can
+   * only ever host ONE context type for its lifetime, and the next
+   * companion opened in this tab may need the other one. */
+  function rigReplaceCanvas() {
+    if (rig.gl) {
+      const ext = rig.gl.ctx.getExtension("WEBGL_lose_context");
+      if (ext) ext.loseContext();
+    }
+    const fresh = els.rigCanvas.cloneNode(false);
+    els.rigCanvas.replaceWith(fresh);
+    els.rigCanvas = fresh;
+  }
+
   function rigTick(ts) {
     if (!rig.ready) return;
     if (!rig.startTs) { rig.startTs = ts; rig.lastTs = ts; }
@@ -775,7 +970,24 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     }
     rig.reactions = active;
 
-    rigDraw(breath, swayCurrent, active);
+    if (rig.mode === "gl" && rig.gl) {
+      // Same driver as the slice-warp above (cursor, idle drift, the
+      // per-token nudge, state-eased params) — just mapped to a small 2D
+      // viewpoint vector instead of a per-slice pixel offset.
+      const targetX = rigClamp(rig.pointerNorm, -1, 1) * RIG_PARALLAX_POINTER_GAIN;
+      const targetY = rigClamp(rig.pointerNormY, -1, 1) * RIG_PARALLAX_POINTER_GAIN;
+      const pAlpha = 1 - Math.exp(-dt / RIG_PARALLAX_EASE_TAU);
+      rig.glEasedX += (targetX - rig.glEasedX) * pAlpha;
+      rig.glEasedY += (targetY - rig.glEasedY) * pAlpha;
+      const driftX = RIG_PARALLAX_DRIFT_AMP * rig.cur.driftMul * Math.sin(t * 0.31);
+      const driftY = RIG_PARALLAX_DRIFT_AMP * rig.cur.driftMul * Math.sin(t * 0.47 + 1.7);
+      const gain = rig.cur.parallaxGainMul;
+      const px = rigClamp((rig.glEasedX + driftX + rig.tokenPulse * RIG_PARALLAX_TOKEN_GAIN) * gain, -RIG_PARALLAX_MAX, RIG_PARALLAX_MAX);
+      const py = rigClamp((rig.glEasedY + driftY) * gain, -RIG_PARALLAX_MAX, RIG_PARALLAX_MAX);
+      rigGLDraw(breath, px, py);
+    } else {
+      rigDraw(breath, swayCurrent, active);
+    }
     rig.raf = requestAnimationFrame(rigTick);
   }
 
@@ -793,10 +1005,12 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     if (rig.raf) cancelAnimationFrame(rig.raf);
     if (rig.easeTimer) clearTimeout(rig.easeTimer);
     if (rig.pointerHandler) window.removeEventListener("pointermove", rig.pointerHandler);
+    rigReplaceCanvas(); // drops the GL context (if any) + hands back a fresh, context-free canvas
     rig.raf = 0; rig.easeTimer = null; rig.pointerHandler = null;
-    rig.ready = false; rig.descriptor = null; rig.img = null;
+    rig.ready = false; rig.descriptor = null; rig.img = null; rig.ctx = null; rig.gl = null; rig.mode = "2d";
     rig.state = "idle"; rig.pendingSettle = false; rig.reactions = [];
-    rig.startTs = 0; rig.lastTs = 0; rig.easedSway = 0; rig.tokenPulse = 0; rig.pointerNorm = 0;
+    rig.startTs = 0; rig.lastTs = 0; rig.easedSway = 0; rig.tokenPulse = 0;
+    rig.pointerNorm = 0; rig.pointerNormY = 0; rig.glEasedX = 0; rig.glEasedY = 0;
     els.rig.hidden = true;
   }
 
@@ -824,12 +1038,28 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
 
     rig.descriptor = descriptor;
     rig.img = img;
-    rig.ctx = els.rigCanvas.getContext("2d");
+    rig.mode = "2d";
+    rig.gl = null;
+    if (descriptor.depth_url) {
+      try {
+        const depthImg = new Image();
+        depthImg.src = descriptor.depth_url;
+        await depthImg.decode();
+        if (my !== epoch) return;
+        const glState = rigGLSetup(img, depthImg);
+        if (glState) { rig.gl = glState; rig.mode = "gl"; }
+      } catch {
+        // depth missing/corrupt/unreachable, or WebGL unavailable/incapable
+        // — the calm-baseline slice-warp below is the honest degradation
+      }
+    }
+    if (rig.mode === "2d") rig.ctx = els.rigCanvas.getContext("2d");
     rig.state = "idle";
     rig.pendingSettle = false;
     rig.reactions = [];
     rig.cur = { ...RIG_STATE_PARAMS.idle };
-    rig.easedSway = 0; rig.tokenPulse = 0; rig.pointerNorm = 0;
+    rig.easedSway = 0; rig.tokenPulse = 0; rig.pointerNorm = 0; rig.pointerNormY = 0;
+    rig.glEasedX = 0; rig.glEasedY = 0;
     rig.startTs = 0; rig.lastTs = 0;
     // first idle fidget only after a settling-in delay — no twitch on frame one
     rig.nextFidgetAt = performance.now() + 4000 + Math.random() * 4000;
@@ -852,6 +1082,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     setState: (s) => rigSetState(s),
     getState: () => rig.state,
     fireReaction: (t, a) => rigFireReaction(t, a),
+    getMode: () => rig.mode, // "gl" (depth parallax) or "2d" (slice-warp) — whichever actually initialized
   };
 
   /* ---------- status pill / engine poller ---------- */

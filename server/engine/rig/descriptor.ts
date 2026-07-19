@@ -13,6 +13,7 @@ export interface RigDescriptor {
   };
   persona: { energy_scalar: number; reactions: string[] };
   anchors?: RigAnchors;
+  depth_url?: string;
 }
 
 /** Deterministic fractional regions for a front-facing full-body cutout:
@@ -29,12 +30,16 @@ const REGIONS: RigDescriptor["regions"] = {
  * fields come from persona.ts, region fractions are fixed for Phase 1.
  * `anchors` (Phase 2 articulation) is included only when non-empty, so the
  * frontend can cleanly test `if (descriptor.anchors?.eye_l)` without an
- * always-present-but-empty key. */
+ * always-present-but-empty key. `hasDepth` (Phase 2 parallax,
+ * docs/EMANATION-ENGINE-PLAN.md §4.3) is likewise reflected only as a present
+ * `depth_url` — absent whenever depth generation didn't happen or wasn't
+ * available, never a dangling URL to a file that doesn't exist. */
 export function buildDescriptor(
   companionId: string,
   cutout: { w: number; h: number },
   profile: PetProfile,
   anchors?: RigAnchors,
+  hasDepth = false,
 ): RigDescriptor {
   return {
     version: 1,
@@ -46,5 +51,6 @@ export function buildDescriptor(
       reactions: reactionsFor(profile),
     },
     ...(anchors && Object.keys(anchors).length > 0 ? { anchors } : {}),
+    ...(hasDepth ? { depth_url: `/api/companions/${companionId}/rig/depth` } : {}),
   };
 }

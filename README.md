@@ -72,6 +72,13 @@ your files ──► bun server ──► sqlite (chunks + FTS + vectors) ──
 4. **Talk** — in the browser at `/app/`, or `mvp run <name>` in a terminal.
    Replies stream token by token; new memories you share mid-chat are kept
    ("I remember that. I'll always remember that.") — visibly, permanently, locally.
+5. **Look** — `ls memories/` in the app opens everything the shape is made of:
+   the photo gallery, living-memory facts, stories, transcripts, and a life
+   timeline (real dates only — undated things are kept anyway, never invented).
+   Anything can be forgotten, permanently, with a warning that means it.
+   Everything can be exported as a plain zip — `MEMORIES.md`, your original
+   files, and `data.json` — readable with no app at all. Deleting a companion
+   requires typing their name.
 
 ## The CLI
 
@@ -138,9 +145,11 @@ availability and skip loudly, never silently pass.
 
 ## The other page
 
-`/necropets/` is the same product's gothic twin — an A/B test of brand voice
-that this repo grew out of. The waitlist on both pages feeds one local SQLite.
-See [BRAND.md](BRAND.md) for the experiment.
+`/necropets/` is the same product's gothic twin — the brand A/B variant this
+repo grew out of. The experiment is settled: MinimumViablePet is the brand,
+and `/` lands on its page. The NecroPets page stays served as the archived
+variant; the waitlist on both pages feeds one local SQLite. See
+[BRAND.md](BRAND.md) for the experiment and the decision.
 
 ---
 

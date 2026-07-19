@@ -216,11 +216,30 @@ Deferred until the vanilla rig has earned it (§10 graduation).
 Each phase ships dark and graduates only on evidence (the project's dark-launch
 discipline):
 
-- **Phase 0 — this document.** Reviewed and agreed before code. ← we are here.
-- **Phase 1 — vanilla living-portrait rig.** Foreground mask + whole-cutout
-  warp; breath/blink(faked via warp)/sway/look-toward; chat state machine;
-  persona-weighted idle. *Graduates when*: it reads as "alive, not uncanny"
-  to the owner, runs 60fps on the 16GB-class target, and needs no network.
+- **Phase 0 — this document.** Reviewed and agreed before code. ✅ done.
+- **Phase 1 — vanilla living-portrait rig.** ✅ **SHIPPED.** Foreground mask +
+  whole-cutout vertical-slice warp; breath/sway/look-toward-cursor; the chat
+  state machine (idle/listening/thinking/responding/acknowledged/settling)
+  wired to the real `/api/chat` SSE; persona-weighted idle + reactions.
+  Live-verified on Oni: the canvas animates (frame-diff), leans toward the
+  cursor (head-centroid shift), and the persona greeted with the onboarded
+  nose-bump. *Graduation still open on*: an owner's "alive, not uncanny"
+  judgement on their own pet — the remaining subjective gate.
+
+  **As-shipped deviations from this plan (all honest, all recorded):**
+  1. **Blink & independent ear-swivel are Phase 2, not v1.** A whole-cutout
+     warp has no eye/ear anchors, so a real blink can't be faked from it (the
+     plan's optimistic "blink faked via warp" doesn't hold). v1 ships breath,
+     sway, look-toward, and region reactions (head_tilt, ear_perk, lean).
+  2. **Mask tool = macOS Vision** (`VNGenerateForegroundInstanceMaskRequest`
+     via a Swift helper, `server/engine/rig/mask.swift`), matching the repo's
+     existing `sips`/`mdls` macOS shell-outs. rembg-via-`uvx` was tried first
+     and failed on native deps (numba/llvmlite); on non-macOS the rig build is
+     loudly unsupported for now (the assisted-brush fallback moves to a later
+     phase).
+  3. **Source photo is selectable** (`POST /rig?source=<artifactId>`,
+     fulfilling §4.1 "the owner confirms"), with an auto-pick that masks the
+     candidate photos and keeps the fullest **portrait** cutout as the default.
 - **Phase 2 — articulated rig.** Head/ears/eyes/tail layers, real blinks and
   ear flicks, richer reactions. *Graduates when*: articulation improves
   likeness without breaking on the casual-photo inputs real users have.

@@ -161,9 +161,12 @@ describe("trainCompanion", () => {
     expect(result.state).toBe("awake");
     expect(result.chunks_total).toBeGreaterThanOrEqual(5);
     expect(result.chunks_embedded).toBe(result.chunks_total);
+    // rig is best-effort and skips here (no artifact rows in this fixture) —
+    // it still reports its own step so the SSE stream never goes silent
     expect(events.map((e) => e.data.name).filter(Boolean)).toEqual([
-      "consensus", "chunks", "embedding", "compile",
+      "consensus", "chunks", "embedding", "compile", "rig",
     ]);
+    expect(events.find((e) => e.data.name === "rig")?.data.skipped).toBe(true);
 
     const row = db
       .query<{ state: string; persona_prompt: string; trained_at: string }, []>(

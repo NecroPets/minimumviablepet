@@ -21,6 +21,8 @@ import { sniff, type ArtifactKind } from "./ingest/sniff.ts";
 import { streamChat, type ConversationRow } from "./chat.ts";
 import { runInterviewExtraction } from "./interview.ts";
 import { runFactExtraction } from "./memory.ts";
+import { buildRig } from "./rig/build.ts";
+import type { RigDescriptor } from "./rig/descriptor.ts";
 import { trainCompanion, trainPreflight } from "./train.ts";
 import { SSE_HEADERS, sseFrame, ssePing } from "./sse.ts";
 
@@ -44,6 +46,7 @@ interface CompanionRow {
   persona_prompt: string | null;
   created_at: string;
   trained_at: string | null;
+  rig_json: string | null;
 }
 
 const PROCESSORS: Record<ArtifactKind, Processor> = {
@@ -564,6 +567,36 @@ export function createEngineRoutes(): EngineRouter {
     return new Response(stream, { headers: SSE_HEADERS });
   }
 
+  /** Rig cutouts always live at this deterministic path — never derived from
+   * request input — so the serve route below can find them without a DB read. */
+  function rigCutoutPath(companionId: string): string {
+    return join(config.dataDir, "companions", companionId, "rig", "cutout.png");
+  }
+
+  async function handleRigBuild(row: CompanionRow, sourceArtifactId: string | null): Promise<Response> {
+    let rig: RigDescriptor;
+    try {
+      rig = await buildRig(db, row, sourceArtifactId ?? undefined);
+    } catch (err) {
+      console.error(`rig build failed [companion ${row.id}]: ${(err as Error).message}`);
+      return json(500, { ok: false, error: (err as Error).message });
+    }
+    return json(200, { ok: true, rig });
+  }
+
+  function handleRigGet(row: CompanionRow): Response {
+    if (row.rig_json === null) return json(404, { ok: false, error: "no_rig" });
+    return json(200, { ok: true, rig: JSON.parse(row.rig_json) });
+  }
+
+  async function handleRigCutout(row: CompanionRow): Promise<Response> {
+    const file = Bun.file(rigCutoutPath(row.id));
+    if (!(await file.exists())) {
+      return json(404, { ok: false, error: "cutout_missing" });
+    }
+    return new Response(file, { headers: { "Content-Type": "image/png" } });
+  }
+
   function handleMessages(conversationId: string, url: URL): Response {
     const conversation = getConversation.get(conversationId);
     if (!conversation) return json(404, { ok: false, error: "conversation_not_found" });
@@ -715,6 +748,17 @@ export function createEngineRoutes(): EngineRouter {
             return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "POST" });
           }
           return handleTrain(row);
+        }
+        if (rest === "/rig") {
+          if (req.method === "POST") return handleRigBuild(row, new URL(req.url).searchParams.get("source"));
+          if (req.method === "GET") return handleRigGet(row);
+          return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "GET, POST" });
+        }
+        if (rest === "/rig/cutout") {
+          if (req.method !== "GET") {
+            return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "GET" });
+          }
+          return handleRigCutout(row);
         }
       }
 

@@ -13,7 +13,8 @@ CREATE TABLE companions (
   profile_version INTEGER NOT NULL DEFAULT 1,
   persona_prompt  TEXT,
   created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  trained_at      TEXT
+  trained_at      TEXT,
+  rig_json        TEXT
 );
 
 CREATE TABLE artifacts (
@@ -113,6 +114,10 @@ CREATE TABLE messages (
 CREATE INDEX idx_messages_conv ON messages(conversation_id, id);
 `;
 
+// ordered migrations, applied to whatever version an existing DB is at.
+// Fresh DBs skip straight to the latest via the full DDL below.
+const CURRENT_VERSION = 2;
+
 export function openDb(path: string): Database {
   mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
@@ -124,7 +129,12 @@ export function openDb(path: string): Database {
   if (user_version === 0) {
     db.transaction(() => {
       db.run(DDL);
-      db.run("PRAGMA user_version = 1");
+      db.run(`PRAGMA user_version = ${CURRENT_VERSION}`);
+    })();
+  } else if (user_version === 1) {
+    db.transaction(() => {
+      db.run("ALTER TABLE companions ADD COLUMN rig_json TEXT");
+      db.run(`PRAGMA user_version = ${CURRENT_VERSION}`);
     })();
   }
   return db;

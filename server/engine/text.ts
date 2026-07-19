@@ -2,6 +2,13 @@ const WINDOW = 480;
 const OVERLAP = 90;
 const MIN_CHUNK = 40;
 
+/** The story identity transform: processText stores short pieces in
+ * profile.stories collapsed this way, and the artifact-delete prune must
+ * apply the identical transform to find them again. */
+export function collapseWhitespace(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
+
 export function sha256Hex(input: string | Uint8Array): string {
   const hasher = new Bun.CryptoHasher("sha256");
   hasher.update(input);

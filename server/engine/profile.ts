@@ -1,3 +1,5 @@
+import type { Database } from "bun:sqlite";
+
 export interface PetProfile {
   pet: {
     name: string;
@@ -75,6 +77,28 @@ export function emptyProfile(): PetProfile {
     photos_analyzed: [],
     owner_intentions: [],
   };
+}
+
+/** Canonical read-mutate-write for the profile document. `mutate` returns
+ * true if it changed anything; only then does the row get written and
+ * profile_version bumped. Synchronous by design — callers that run after an
+ * await must first re-check their artifact still exists. */
+export function updateProfile(
+  db: Database,
+  companionId: string,
+  mutate: (profile: PetProfile) => boolean,
+): boolean {
+  const row = db
+    .query<{ profile_json: string }, [string]>("SELECT profile_json FROM companions WHERE id = ?")
+    .get(companionId);
+  if (!row) throw new Error(`companion ${companionId} is gone — no profile to update`);
+  const profile = parseProfile(row.profile_json);
+  if (!mutate(profile)) return false;
+  db.run(
+    "UPDATE companions SET profile_json = ?, profile_version = profile_version + 1 WHERE id = ?",
+    [JSON.stringify(profile), companionId],
+  );
+  return true;
 }
 
 /** Normalize whatever is in companions.profile_json onto the full shape, so

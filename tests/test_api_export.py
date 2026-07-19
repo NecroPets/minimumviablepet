@@ -134,6 +134,43 @@ def test_export_cleans_up_its_temp_dir_after_download(server, tmp_path):
     assert leaked == set(), f"export temp dirs never cleaned up: {leaked}"
 
 
+def test_export_cleans_up_when_client_aborts_mid_download(server, upload, artifact_waiter):
+    """The other half of the cleanup contract: a client that disconnects
+    partway through the zip must still leave no temp dir behind (the
+    stream's cancel path)."""
+    import http.client
+    import os
+    import random
+
+    cid = create_companion(server, name="Abort")
+    # 8 MB of incompressible bytes behind a PNG magic → a zip big enough
+    # that closing after 64 KB is a genuine mid-stream abort
+    blob = b"\x89PNG\r\n\x1a\n" + random.randbytes(8 * 1024 * 1024)
+    _, body = upload(f"{server.base_url}/api/companions/{cid}/artifacts", [("big.png", blob)], timeout=120)
+    artifact_waiter(server, cid, body["results"][0]["artifact"]["id"], timeout=120)
+
+    tmp_root = pathlib.Path(tempfile.gettempdir())
+    before = {p.name for p in tmp_root.glob("mvp-export-*")}
+
+    conn = http.client.HTTPConnection("127.0.0.1", server.port, timeout=30)
+    conn.request("GET", f"/api/companions/{cid}/export")
+    resp = conn.getresponse()
+    assert resp.status == 200
+    first = resp.read(65536)
+    assert first[:2] == b"PK"
+    # the zip contains 8 MB of incompressible bytes, so 64 KB read is
+    # mid-stream by construction (Bun streams chunked — no Content-Length)
+    conn.close()  # abort with most of the body unread
+
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        leaked = {p.name for p in tmp_root.glob("mvp-export-*")} - before
+        if not leaked:
+            break
+        time.sleep(0.3)
+    assert leaked == set(), f"aborted export leaked temp dirs: {leaked}"
+
+
 def test_export_404_for_unknown_companion(server):
     status, body = api(server, "GET", "/api/companions/nope/export")
     assert status == 404

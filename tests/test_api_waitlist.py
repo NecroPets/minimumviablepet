@@ -121,7 +121,7 @@ def test_routing(server):
     resp = conn.getresponse()
     resp.read()
     assert resp.status == 302
-    assert resp.getheader("Location") == "/necropets/"
+    assert resp.getheader("Location") == "/minimumviablepet/"
 
     conn.request("GET", "/necropets")
     resp = conn.getresponse()

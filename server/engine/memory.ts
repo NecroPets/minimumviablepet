@@ -111,6 +111,16 @@ export async function runFactExtraction(
   return { new_facts: inserted };
 }
 
+/** Delete one fact and its paired retrieval chunk in lockstep — the same
+ * rule applyFactCap enforces: a dangling chunk would be a ghost memory, a
+ * dangling fact would resurrect on the next extraction. */
+export function deleteFact(db: Database, factId: string): void {
+  db.transaction(() => {
+    db.run("DELETE FROM facts WHERE id = ?", [factId]);
+    db.run("DELETE FROM chunks WHERE source_key = ?", [`fact:${factId}`]);
+  })();
+}
+
 /** Enforce the fact cap: evict lowest-confidence-then-oldest, and remove the
  * evicted facts' chunks in lockstep so retrieval can never see a ghost. */
 export function applyFactCap(db: Database, companionId: string, cap = config.maxFacts): void {

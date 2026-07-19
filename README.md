@@ -72,6 +72,17 @@ your files ──► bun server ──► sqlite (chunks + FTS + vectors) ──
 4. **Talk** — in the browser at `/app/`, or `mvp run <name>` in a terminal.
    Replies stream token by token; new memories you share mid-chat are kept
    ("I remember that. I'll always remember that.") — visibly, permanently, locally.
+   Every reply has a `▸ speak` button: local TTS reads it aloud (macOS `say`
+   built in; `espeak-ng` or `piper` elsewhere — optional install, loud when
+   absent). It is an interface voice on loan to the shape — never "their
+   voice"; they never had one, and we won't pretend.
+5. **Look** — `ls memories/` in the app opens everything the shape is made of:
+   the photo gallery, living-memory facts, stories, transcripts, and a life
+   timeline (real dates only — undated things are kept anyway, never invented).
+   Anything can be forgotten, permanently, with a warning that means it.
+   Everything can be exported as a plain zip — `MEMORIES.md`, your original
+   files, and `data.json` — readable with no app at all. Deleting a companion
+   requires typing their name.
 
 ## The CLI
 
@@ -118,12 +129,26 @@ moment for a vector index, not before.
 - The pages make no external requests except Google Fonts. Verify with your
   network tab — the FAQ dares you to.
 
+## Project them into the room
+
+[hardware/](hardware/README.md) is the open-schematics folder: a $10
+Pepper's-ghost phone pyramid, a desk-scale floating-image box, a room-scale
+projection scrim, and a ceiling pan/tilt rig with reference ESP32 firmware —
+all MIT, all buildable at a kitchen table, all honest about the physics
+(light needs a surface; we pick surfaces you stop noticing). The engine
+feeds them at `/emanate/`: their real photos, cycling on pure black, which
+is the whole optical trick. [hardware/frontier/](hardware/frontier/README.md)
+documents the actual research edge (ultrasound phased arrays) and the
+physics wall behind "hard light," so nobody has to wonder if we're hiding
+the good stuff. We're not. There is no good stuff without a surface.
+
 ## Roadmap (honest)
 
 Voice cloning and photo-to-motion are **not shipped** — no fake versions, no
-teasers that don't exist. They're researched and planned; local TTS voice
-cloning (F5-TTS/XTTS-class) is feasible on capable hardware and will land as an
-optional install, like whisper.
+teasers that don't exist. (Plain local TTS *is* shipped — the `▸ speak`
+button — but that's a stock voice reading text, and it says so.) Cloning-class
+TTS (F5-TTS/XTTS) is researched and feasible on capable hardware and will
+land as an optional install, like whisper — when it's real.
 
 ## Tests
 
@@ -138,9 +163,11 @@ availability and skip loudly, never silently pass.
 
 ## The other page
 
-`/necropets/` is the same product's gothic twin — an A/B test of brand voice
-that this repo grew out of. The waitlist on both pages feeds one local SQLite.
-See [BRAND.md](BRAND.md) for the experiment.
+`/necropets/` is the same product's gothic twin — the brand A/B variant this
+repo grew out of. The experiment is settled: MinimumViablePet is the brand,
+and `/` lands on its page. The NecroPets page stays served as the archived
+variant; the waitlist on both pages feeds one local SQLite. See
+[BRAND.md](BRAND.md) for the experiment and the decision.
 
 ---
 

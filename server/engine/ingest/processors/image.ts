@@ -1,11 +1,11 @@
 import { join } from "node:path";
 import { run } from "../../exec.ts";
 import { ollama } from "../../ollama.ts";
-import { parseProfile } from "../../profile.ts";
+import { updateProfile } from "../../profile.ts";
 import { mdlsCapturedAt } from "../capture.ts";
 import { IMAGE_CAPTION_PROMPT } from "../prompts.ts";
 import type { Processor } from "../queue.ts";
-import { patchArtifactMeta, setCapturedAt, storeArtifactChunks } from "../store.ts";
+import { artifactStillExists, patchArtifactMeta, setCapturedAt, storeArtifactChunks } from "../store.ts";
 
 interface CaptionTail {
   caption: string;
@@ -104,11 +104,13 @@ export const processImage: Processor = async (ctx) => {
   // Vision output never writes pet.* directly — photo evidence accumulates in
   // photos_analyzed; train folds a consensus into still-empty fields.
   if (parsed.physical.length > 0) {
-    const row = db
-      .query<{ profile_json: string }, [string]>("SELECT profile_json FROM companions WHERE id = ?")
-      .get(artifact.companion_id)!;
-    const profile = parseProfile(row.profile_json);
-    if (!profile.photos_analyzed.some((p) => p.hash8 === artifact.hash.slice(0, 8))) {
+    // re-check after the vision/embed awaits: a forget that landed mid-caption
+    // must not resurrect as a photos_analyzed entry
+    if (!artifactStillExists(db, artifact.id)) {
+      throw new Error(`${artifact.original_name} was forgotten mid-processing — leaving no trace`);
+    }
+    updateProfile(db, artifact.companion_id, (profile) => {
+      if (profile.photos_analyzed.some((p) => p.hash8 === artifact.hash.slice(0, 8))) return false;
       profile.photos_analyzed.push({
         file: artifact.original_name,
         hash8: artifact.hash.slice(0, 8),
@@ -116,11 +118,8 @@ export const processImage: Processor = async (ctx) => {
         summary: parsed.caption.split(/(?<=[.!?])\s/)[0] ?? parsed.caption.slice(0, 160),
         physical: parsed.physical,
       });
-      db.run(
-        "UPDATE companions SET profile_json = ?, profile_version = profile_version + 1 WHERE id = ?",
-        [JSON.stringify(profile), artifact.companion_id],
-      );
-    }
+      return true;
+    });
   }
 
   const detail =

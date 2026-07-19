@@ -1,11 +1,16 @@
-import { mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { config } from "./config.ts";
 import { getDb } from "./db.ts";
+import { buildExport, type ExportResult } from "./export.ts";
+import { loadMemories } from "./memories.ts";
 import { ollama } from "./ollama.ts";
-import { parseProfile, readiness, type Readiness } from "./profile.ts";
+import { deleteFact } from "./memory.ts";
+import { parseProfile, readiness, updateProfile, type Readiness } from "./profile.ts";
+import { synthesize } from "./tts.ts";
 import { Broadcaster } from "./sse.ts";
-import { sha256Hex } from "./text.ts";
+import { collapseWhitespace, sha256Hex } from "./text.ts";
 import { IngestQueue, type ArtifactRow, type Processor } from "./ingest/queue.ts";
 import { processAudio } from "./ingest/processors/audio.ts";
 import { processImage } from "./ingest/processors/image.ts";
@@ -290,6 +295,143 @@ export function createEngineRoutes(): EngineRouter {
     return json(200, { ok: true, artifacts, counts });
   }
 
+  async function handleArtifactFile(row: CompanionRow, artifactId: string): Promise<Response> {
+    const artifact = getArtifactById.get(artifactId);
+    if (!artifact || artifact.companion_id !== row.id) {
+      return json(404, { ok: false, error: "artifact_not_found" });
+    }
+    // the DB row is the only source of the path — nothing from the request
+    // ever reaches the filesystem
+    const file = Bun.file(artifact.stored_path);
+    if (!(await file.exists())) {
+      console.error(`artifact ${artifact.id} file route: stored file missing on disk (${artifact.stored_path})`);
+      return json(404, { ok: false, error: "file_missing" });
+    }
+    return new Response(file, { headers: { "Content-Type": artifact.mime } });
+  }
+
+  const deleteArtifactStmt = db.prepare("DELETE FROM artifacts WHERE id = ?");
+
+  /** Remove what the artifact contributed to the profile document: its
+   * photos_analyzed entry (by hash8), and — for text artifacts — the story
+   * processText kept verbatim, unless another surviving text artifact
+   * carries the identical collapsed text. Runs inside the delete
+   * transaction, after the row is gone, so the twin check sees only
+   * survivors. */
+  function pruneArtifactFromProfile(companionId: string, artifact: ArtifactRow): void {
+    const hash8 = artifact.hash.slice(0, 8);
+    const story = artifact.kind === "text" && artifact.derived_text ? collapseWhitespace(artifact.derived_text) : "";
+    updateProfile(db, companionId, (profile) => {
+      const beforePhotos = profile.photos_analyzed.length;
+      profile.photos_analyzed = profile.photos_analyzed.filter((p) => p.hash8 !== hash8);
+      let changed = profile.photos_analyzed.length !== beforePhotos;
+      if (story && profile.stories.includes(story)) {
+        const twins = db
+          .query<{ derived_text: string | null }, [string]>(
+            "SELECT derived_text FROM artifacts WHERE companion_id = ? AND kind = 'text'",
+          )
+          .all(companionId);
+        if (!twins.some((t) => t.derived_text !== null && collapseWhitespace(t.derived_text) === story)) {
+          profile.stories = profile.stories.filter((s) => s !== story);
+          changed = true;
+        }
+      }
+      return changed;
+    });
+  }
+
+  function handleArtifactDelete(row: CompanionRow, artifactId: string): Response {
+    const artifact = getArtifactById.get(artifactId);
+    if (!artifact || artifact.companion_id !== row.id) {
+      return json(404, { ok: false, error: "artifact_not_found" });
+    }
+    // FK ON DELETE CASCADE removes this artifact's chunks (and the FTS
+    // triggers keep the index in sync); the profile prune rides along in the
+    // same transaction so a crash mid-way can never leave a stale caption
+    db.transaction(() => {
+      deleteArtifactStmt.run(artifact.id);
+      pruneArtifactFromProfile(row.id, artifact);
+    })();
+    if (existsSync(artifact.stored_path)) {
+      rmSync(artifact.stored_path, { force: true });
+    } else {
+      console.error(`artifact ${artifact.id} delete: stored file already missing on disk (${artifact.stored_path})`);
+    }
+    return json(200, { ok: true, id: artifact.id });
+  }
+
+  const getFactById = db.query<{ id: string; companion_id: string }, [string]>(
+    "SELECT id, companion_id FROM facts WHERE id = ?",
+  );
+
+  function handleFactDelete(row: CompanionRow, factId: string): Response {
+    const fact = getFactById.get(factId);
+    if (!fact || fact.companion_id !== row.id) {
+      return json(404, { ok: false, error: "fact_not_found" });
+    }
+    deleteFact(db, fact.id);
+    return json(200, { ok: true, id: fact.id });
+  }
+
+  /** Stream a temp file back and remove its tmpRoot afterward — on
+   * completion or client cancel, whichever comes first. */
+  function streamAndCleanup(filePath: string, tmpRoot: string, headers: Record<string, string>): Response {
+    const file = Bun.file(filePath);
+    const size = file.size;
+    const reader = file.stream().getReader();
+    const stream = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          rmSync(tmpRoot, { recursive: true, force: true });
+          return;
+        }
+        controller.enqueue(value);
+      },
+      cancel() {
+        rmSync(tmpRoot, { recursive: true, force: true });
+      },
+    });
+    return new Response(stream, { headers: { ...headers, "Content-Length": String(size) } });
+  }
+
+  async function handleExport(row: CompanionRow): Promise<Response> {
+    let result: ExportResult;
+    try {
+      result = await buildExport(db, row);
+    } catch (err) {
+      console.error(`export failed [companion ${row.id}]: ${(err as Error).message}`);
+      return json(500, { ok: false, error: (err as Error).message });
+    }
+    return streamAndCleanup(result.zipPath, result.tmpRoot, {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${result.downloadName}"`,
+    });
+  }
+
+  async function handleSay(row: CompanionRow, req: Request): Promise<Response> {
+    const body = await readJsonBody(req);
+    if (body instanceof Response) return body;
+    const text = typeof body.text === "string" ? body.text.trim() : "";
+    if (text.length === 0) {
+      return json(400, { ok: false, error: "text_required" });
+    }
+    if (text.length > 2000) {
+      return json(400, { ok: false, error: "text_too_long — 2000 chars is plenty to read aloud" });
+    }
+    const tmpRoot = mkdtempSync(join(tmpdir(), "mvp-say-"));
+    let wavPath: string;
+    try {
+      wavPath = await synthesize(text, tmpRoot);
+    } catch (err) {
+      rmSync(tmpRoot, { recursive: true, force: true });
+      console.error(`say failed [companion ${row.id}]: ${(err as Error).message}`);
+      return json(500, { ok: false, error: (err as Error).message });
+    }
+    return streamAndCleanup(wavPath, tmpRoot, { "Content-Type": "audio/wav" });
+  }
+
   function handleDelete(row: CompanionRow, url: URL): Response {
     const confirm = url.searchParams.get("confirm");
     if (confirm !== row.name) {
@@ -475,6 +617,39 @@ export function createEngineRoutes(): EngineRouter {
         return handleMessages(convMatch[1], new URL(req.url));
       }
 
+      // artifact/fact ids are UUIDs (hyphens, digits) so they fall outside
+      // the general `[a-z_]+` company-subresource match below — matched here
+      // instead, same shape as convMatch above.
+      const artifactFileMatch = pathname.match(/^\/api\/companions\/([^/]+)\/artifacts\/([^/]+)\/file$/);
+      if (artifactFileMatch) {
+        if (req.method !== "GET") {
+          return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "GET" });
+        }
+        const row = getCompanion.get(artifactFileMatch[1]);
+        if (!row) return json(404, { ok: false, error: "companion_not_found" });
+        return handleArtifactFile(row, artifactFileMatch[2]);
+      }
+
+      const artifactMatch = pathname.match(/^\/api\/companions\/([^/]+)\/artifacts\/([^/]+)$/);
+      if (artifactMatch) {
+        if (req.method !== "DELETE") {
+          return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "DELETE" });
+        }
+        const row = getCompanion.get(artifactMatch[1]);
+        if (!row) return json(404, { ok: false, error: "companion_not_found" });
+        return handleArtifactDelete(row, artifactMatch[2]);
+      }
+
+      const factMatch = pathname.match(/^\/api\/companions\/([^/]+)\/facts\/([^/]+)$/);
+      if (factMatch) {
+        if (req.method !== "DELETE") {
+          return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "DELETE" });
+        }
+        const row = getCompanion.get(factMatch[1]);
+        if (!row) return json(404, { ok: false, error: "companion_not_found" });
+        return handleFactDelete(row, factMatch[2]);
+      }
+
       if (pathname === "/api/app/health") {
         if (req.method !== "GET") {
           return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "GET" });
@@ -522,6 +697,18 @@ export function createEngineRoutes(): EngineRouter {
         }
         if (rest === "/conversations" && req.method === "GET") {
           return json(200, { ok: true, conversations: listConversations.all(row.id) });
+        }
+        if (rest === "/memories" && req.method === "GET") {
+          return json(200, { ok: true, memories: loadMemories(db, row.id) });
+        }
+        if (rest === "/export" && req.method === "GET") {
+          return handleExport(row);
+        }
+        if (rest === "/say") {
+          if (req.method !== "POST") {
+            return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "POST" });
+          }
+          return handleSay(row, req);
         }
         if (rest === "/train") {
           if (req.method !== "POST") {

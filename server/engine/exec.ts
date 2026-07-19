@@ -1,6 +1,8 @@
 export interface RunOptions {
   timeoutMs?: number;
   cwd?: string;
+  /** text piped to the child's stdin, then closed (piper reads its input this way) */
+  stdin?: string;
   /** grace after SIGTERM before SIGKILL (tests shrink this) */
   killGraceMs?: number;
   /** grace after exit for output pipes to close before giving up on them */
@@ -17,7 +19,12 @@ export interface RunOptions {
 export async function run(cmd: string[], opts: RunOptions = {}): Promise<string> {
   let proc: ReturnType<typeof Bun.spawn>;
   try {
-    proc = Bun.spawn(cmd, { cwd: opts.cwd, stdout: "pipe", stderr: "pipe" });
+    proc = Bun.spawn(cmd, {
+      cwd: opts.cwd,
+      stdin: opts.stdin === undefined ? undefined : new TextEncoder().encode(opts.stdin),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
   } catch (err) {
     throw new Error(`${cmd[0]} could not be started — is it installed and on PATH? (${(err as Error).message})`);
   }

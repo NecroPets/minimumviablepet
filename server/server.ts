@@ -45,8 +45,13 @@ const MAX_BODY_BYTES = 4096;
 const PAGES: Record<string, string> = {
   "/necropets/": join(import.meta.dir, "..", "site", "necropets", "index.html"),
   "/minimumviablepet/": join(import.meta.dir, "..", "site", "minimumviablepet", "index.html"),
-  // the product UI exists only in local mode
-  ...(MVP_PUBLIC ? {} : { "/app/": join(import.meta.dir, "..", "site", "app", "index.html") }),
+  // the product UI (and its projection surface) exists only in local mode
+  ...(MVP_PUBLIC
+    ? {}
+    : {
+        "/app/": join(import.meta.dir, "..", "site", "app", "index.html"),
+        "/emanate/": join(import.meta.dir, "..", "site", "emanate", "index.html"),
+      }),
 };
 
 function json(
@@ -138,11 +143,11 @@ const server = Bun.serve({
         healthProbe.get();
         return json(200, { ok: true });
       }
-      if (pathname === "/") return redirect(302, "/necropets/");
+      if (pathname === "/") return redirect(302, "/minimumviablepet/");
       if (
         pathname === "/necropets" ||
         pathname === "/minimumviablepet" ||
-        (!MVP_PUBLIC && pathname === "/app")
+        (!MVP_PUBLIC && (pathname === "/app" || pathname === "/emanate"))
       ) {
         return redirect(301, `${pathname}/`);
       }
@@ -167,6 +172,6 @@ const server = Bun.serve({
 });
 
 console.log(
-  `necropets-ab listening on http://${MVP_PUBLIC ? "0.0.0.0" : "127.0.0.1"}:${server.port} (db: ${DB_PATH})` +
+  `minimumviablepet listening on http://${MVP_PUBLIC ? "0.0.0.0" : "127.0.0.1"}:${server.port} (db: ${DB_PATH})` +
     (MVP_PUBLIC ? " [public: landing pages only]" : " [local: engine mounted]"),
 );

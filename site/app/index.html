@@ -123,6 +123,13 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
   background: rgba(63, 226, 143, 0.12); border-left: none;
   border-right: 2px solid var(--mvp-term-green);
 }
+.app-speak {
+  align-self: flex-end; margin-left: 8px; flex-shrink: 0;
+  background: none; border: none; padding: 2px 4px; cursor: pointer;
+  font-family: var(--mvp-mono); font-size: 0.72rem; color: var(--mvp-muted);
+}
+.app-speak:hover:not(:disabled) { color: var(--mvp-term-green); }
+.app-speak:disabled { cursor: default; }
 .app-line { font-family: var(--mvp-mono); font-size: 0.82rem; line-height: 1.7; color: var(--mvp-term-text); white-space: pre-wrap; word-break: break-word; }
 .app-line--dim { color: var(--mvp-muted); }
 .app-line--ok { color: var(--mvp-term-green); }
@@ -187,6 +194,64 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
 .app-drawer__artifacts { font-family: var(--mvp-mono); font-size: 0.75rem; color: var(--mvp-ink-soft); line-height: 1.9; }
 .app-drawer__foot { margin-top: auto; font-family: var(--mvp-serif); font-style: italic; font-size: 0.85rem; color: var(--mvp-ink-soft); }
 
+/* ---------- memories drawer ---------- */
+.app-drawer--wide { width: min(560px, 96vw); }
+.app-mem-section { display: flex; flex-direction: column; gap: 8px; }
+.app-mem-section h3 { margin: 0; font-family: var(--mvp-mono); font-size: 0.78rem; color: var(--mvp-ink-soft); font-weight: 700; }
+.app-mem-empty { font-size: 0.85rem; color: var(--mvp-ink-soft); }
+.app-mem-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 8px; }
+.app-mem-photo { border: 1px solid var(--mvp-line); border-radius: var(--mvp-r); overflow: hidden; background: #fff; }
+.app-mem-photo img { display: block; width: 100%; height: 86px; object-fit: cover; }
+.app-mem-photo__stub {
+  height: 86px; display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 6px; font-family: var(--mvp-mono); font-size: 0.62rem; line-height: 1.35;
+  color: var(--mvp-ink-soft); background: var(--mvp-paper-2);
+}
+.app-mem-photo__caption { padding: 5px 7px 0; font-size: 0.68rem; line-height: 1.35; color: var(--mvp-ink-soft); }
+.app-mem-forget {
+  display: block; width: 100%; margin-top: 5px; padding: 5px 7px; text-align: left;
+  font-family: var(--mvp-mono); font-size: 0.65rem; color: var(--mvp-ink-soft);
+  background: none; border: none; border-top: 1px solid var(--mvp-line);
+}
+.app-mem-forget:hover { color: var(--mvp-heart); }
+.app-mem-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.app-mem-fact {
+  display: flex; align-items: flex-start; gap: 8px; font-size: 0.85rem; line-height: 1.5;
+  padding: 7px 9px; background: #fff; border: 1px solid var(--mvp-line); border-radius: var(--mvp-r);
+}
+.app-mem-fact span { flex: 1; }
+.app-mem-fact .app-mem-forget { flex: none; width: auto; margin: 0; padding: 2px 6px; border-top: none; }
+.app-mem-story {
+  font-family: var(--mvp-serif); font-style: italic; color: var(--mvp-ink-soft); font-size: 0.88rem; line-height: 1.5;
+  padding: 7px 9px; background: #fff; border: 1px solid var(--mvp-line); border-radius: var(--mvp-r);
+}
+.app-mem-transcript { border: 1px solid var(--mvp-line); border-radius: var(--mvp-r); background: #fff; padding: 8px 10px; }
+.app-mem-transcript__head { font-family: var(--mvp-mono); font-size: 0.7rem; color: var(--mvp-ink-soft); margin-bottom: 4px; }
+.app-mem-transcript__body { font-size: 0.85rem; line-height: 1.5; white-space: pre-wrap; }
+.app-mem-timeline__strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.app-mem-timeline__item {
+  flex: none; min-width: 92px; border: 1px solid var(--mvp-line); border-radius: var(--mvp-r);
+  background: #fff; padding: 6px 8px;
+}
+.app-mem-timeline__date { font-family: var(--mvp-mono); font-size: 0.66rem; color: var(--mvp-green-dark); }
+.app-mem-timeline__label { font-size: 0.76rem; margin-top: 2px; word-break: break-word; }
+.app-mem-timeline__undated { margin-top: 8px; font-family: var(--mvp-mono); font-size: 0.72rem; color: var(--mvp-ink-soft); }
+.app-mem-timeline__undated-head { margin-bottom: 4px; }
+.app-mem-timeline__undated-item { padding: 2px 0; }
+.app-mem-danger {
+  border: 1px solid var(--mvp-heart); border-radius: var(--mvp-r-lg); padding: 14px;
+  background: rgba(229, 72, 77, 0.05); display: flex; flex-direction: column; gap: 8px;
+}
+.app-mem-danger h3 { margin: 0; font-family: var(--mvp-mono); font-size: 0.82rem; color: var(--mvp-heart); }
+.app-mem-danger__copy { font-size: 0.82rem; line-height: 1.5; color: var(--mvp-ink-soft); margin: 0; }
+.app-mem-danger__label { font-family: var(--mvp-mono); font-size: 0.72rem; color: var(--mvp-ink-soft); }
+.app-mem-danger__input {
+  font-family: var(--mvp-mono); font-size: 0.85rem; border: 1px solid var(--mvp-line);
+  border-radius: var(--mvp-r); padding: 0.5em 0.7em; background: #fff; color: var(--mvp-ink); min-height: 38px;
+}
+.app-mem-danger__btn { background: var(--mvp-heart); border-color: var(--mvp-heart); }
+.app-mem-danger__btn:hover { background: #c73e42; border-color: #c73e42; }
+
 /* ---------- drop veil ---------- */
 .app-veil {
   position: fixed; inset: 10px; z-index: 60; border: 3px dashed var(--mvp-green);
@@ -219,6 +284,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
   </a>
   <select class="app-switcher" id="app-switcher" aria-label="Companion" hidden></select>
   <span class="app-bar__spacer"></span>
+  <button class="mvp-btn mvp-btn--ghost" id="app-memories-btn" hidden>ls memories/</button>
   <button class="mvp-btn mvp-btn--ghost" id="app-drawer-btn" hidden>cat companion.json</button>
   <span class="app-status" id="app-status" data-mode="loading">
     <span class="dot" aria-hidden="true"></span>
@@ -257,6 +323,46 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
   <p class="app-drawer__foot">The bar exists so that what answers you actually sounds like them. There's no rush to clear it.</p>
 </aside>
 
+<aside class="app-drawer app-drawer--wide" id="app-memories-drawer" hidden aria-label="Memories">
+  <h2 id="app-memories-title">$ mvp memories</h2>
+  <div class="app-drawer__term" id="app-mem-log" aria-live="polite" hidden></div>
+
+  <section class="app-mem-section" aria-labelledby="app-mem-photos-h">
+    <h3 id="app-mem-photos-h">photos/</h3>
+    <div class="app-mem-gallery" id="app-mem-photos"></div>
+  </section>
+
+  <section class="app-mem-section" aria-labelledby="app-mem-facts-h">
+    <h3 id="app-mem-facts-h">living memory</h3>
+    <ul class="app-mem-list" id="app-mem-facts"></ul>
+  </section>
+
+  <section class="app-mem-section" aria-labelledby="app-mem-stories-h">
+    <h3 id="app-mem-stories-h">stories</h3>
+    <ul class="app-mem-list" id="app-mem-stories"></ul>
+  </section>
+
+  <section class="app-mem-section" aria-labelledby="app-mem-transcripts-h">
+    <h3 id="app-mem-transcripts-h">transcripts</h3>
+    <div id="app-mem-transcripts"></div>
+  </section>
+
+  <section class="app-mem-section" aria-labelledby="app-mem-timeline-h">
+    <h3 id="app-mem-timeline-h">timeline</h3>
+    <div id="app-mem-timeline"></div>
+  </section>
+
+  <button type="button" class="mvp-btn mvp-btn--ghost" id="app-mem-export-btn">export ./memories.zip</button>
+
+  <section class="app-mem-danger" aria-labelledby="app-mem-danger-h">
+    <h3 id="app-mem-danger-h">delete this companion</h3>
+    <p class="app-mem-danger__copy">This erases everything on this machine — files, facts, conversations, all of it. There is no undo. Export a copy first if you're not sure.</p>
+    <label class="app-mem-danger__label" for="app-mem-confirm-input">type <strong id="app-mem-confirm-name"></strong> to confirm</label>
+    <input class="app-mem-danger__input" id="app-mem-confirm-input" type="text" autocomplete="off">
+    <button type="button" class="mvp-btn app-mem-danger__btn" id="app-mem-delete-btn" disabled>delete companion</button>
+  </section>
+</aside>
+
 <div class="app-veil" id="app-veil" hidden>drop it here. i'd like to see.</div>
 <input type="file" id="app-file-input" multiple hidden
        accept=".jpg,.jpeg,.png,.heic,.gif,.webp,.m4a,.mp3,.wav,.mov,.mp4,.pdf,.txt,.md">
@@ -282,6 +388,13 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     drawerTitle: $("app-drawer-title"), checklist: $("app-checklist"),
     trainBtn: $("app-train-btn"), trainLog: $("app-train-log"),
     artifacts: $("app-artifacts"), veil: $("app-veil"), fileInput: $("app-file-input"),
+    memoriesBtn: $("app-memories-btn"), memoriesDrawer: $("app-memories-drawer"),
+    memoriesTitle: $("app-memories-title"), memLog: $("app-mem-log"),
+    memPhotos: $("app-mem-photos"), memFacts: $("app-mem-facts"),
+    memStories: $("app-mem-stories"), memTranscripts: $("app-mem-transcripts"),
+    memTimeline: $("app-mem-timeline"), memExportBtn: $("app-mem-export-btn"),
+    memConfirmName: $("app-mem-confirm-name"), memConfirmInput: $("app-mem-confirm-input"),
+    memDeleteBtn: $("app-mem-delete-btn"),
   };
 
   const state = {
@@ -295,6 +408,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     ingestAbort: null,      // teardown for the ingest SSE follower
     pendingFiles: null,     // files dropped before any companion existed
     artifactLines: new Map(),
+    memories: null,         // last-fetched GET /api/companions/:id/memories payload
   };
 
   /* Every async view continuation checks its epoch; navigation bumps it. */
@@ -364,9 +478,61 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     b.className = "app-msg__bubble";
     b.textContent = text;
     wrap.appendChild(b);
+    if (role === "bot") wrap.appendChild(speakButton(b));
     els.log.appendChild(wrap);
     scrollPin();
     return b;
+  }
+
+  /* ---------- speak: local TTS reads a reply aloud ----------
+     An interface voice, on loan to the shape — never presented as theirs. */
+  let speaking = null; // the one Audio allowed to play at a time
+  function speakButton(bubbleEl) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "app-speak";
+    btn.textContent = "▸ speak";
+    btn.title = "read this aloud — a voice on loan, not theirs";
+    btn.addEventListener("click", async () => {
+      const text = bubbleEl.textContent.trim();
+      if (text === "" || btn.disabled) return;
+      btn.disabled = true;
+      btn.textContent = "▸ …";
+      try {
+        const res = await fetch(`/api/companions/${state.companion.companion.id}/say`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `HTTP ${res.status}`);
+        }
+        const url = URL.createObjectURL(await res.blob());
+        speaking?.pause();
+        const audio = new Audio(url);
+        speaking = audio;
+        btn.textContent = "▸ speaking";
+        audio.addEventListener("ended", () => {
+          URL.revokeObjectURL(url);
+          btn.disabled = false;
+          btn.textContent = "▸ speak";
+        });
+        audio.addEventListener("pause", () => {
+          if (audio.ended) return;
+          URL.revokeObjectURL(url);
+          btn.disabled = false;
+          btn.textContent = "▸ speak";
+        });
+        await audio.play();
+      } catch (err) {
+        // the server's message carries the install hint verbatim — show it
+        btn.disabled = false;
+        btn.textContent = "▸ speak";
+        line(`✗ couldn't speak: ${err.message}`, "warn");
+      }
+    });
+    return btn;
   }
   function clearLog() {
     els.log.textContent = "";
@@ -408,6 +574,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     closeIngestStream();
     state.ingesting = 0;
     toggleDrawer(false);
+    toggleMemoriesDrawer(false);
 
     const m = location.hash.match(/^#\/c\/(.+)$/);
     if (!m) {
@@ -447,6 +614,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     els.phase.textContent = "";
     els.progress.hidden = true;
     els.drawerBtn.hidden = true;
+    els.memoriesBtn.hidden = true;
     clearLog();
     showEmptyContent();
   }
@@ -529,6 +697,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     state.companion = res;
     els.switcher.value = id;
     els.drawerBtn.hidden = false;
+    els.memoriesBtn.hidden = false;
     clearLog();
     followIngest(id, my);
 
@@ -707,6 +876,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && state.streaming) state.abort?.abort();
     if (e.key === "Escape" && !els.drawer.hidden) toggleDrawer(false);
+    if (e.key === "Escape" && !els.memoriesDrawer.hidden) toggleMemoriesDrawer(false);
   });
 
   /* ---------- ingest ---------- */
@@ -845,12 +1015,13 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
 
   /* ---------- drawer ---------- */
   function toggleDrawer(open) {
+    if (open) els.memoriesDrawer.hidden = true;
     els.drawer.hidden = !open;
-    els.scrim.hidden = !open;
+    els.scrim.hidden = els.drawer.hidden && els.memoriesDrawer.hidden;
     if (open) renderDrawer();
   }
   els.drawerBtn.addEventListener("click", () => toggleDrawer(els.drawer.hidden));
-  els.scrim.addEventListener("click", () => toggleDrawer(false));
+  els.scrim.addEventListener("click", () => { toggleDrawer(false); toggleMemoriesDrawer(false); });
   function refreshDrawerIfOpen() {
     if (!els.drawer.hidden) renderDrawer();
     if (!state.companion) return;
@@ -936,6 +1107,288 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
       els.trainLog.textContent += `✗ ${err.message}\n`;
     } finally {
       els.trainBtn.disabled = false;
+    }
+  });
+
+  /* ---------- memories drawer ---------- */
+  function toggleMemoriesDrawer(open) {
+    if (open) els.drawer.hidden = true;
+    els.memoriesDrawer.hidden = !open;
+    els.scrim.hidden = els.drawer.hidden && els.memoriesDrawer.hidden;
+    if (open) renderMemoriesDrawer();
+  }
+  els.memoriesBtn.addEventListener("click", () => toggleMemoriesDrawer(els.memoriesDrawer.hidden));
+
+  const IMG_RENDERABLE_EXT = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
+  function extOf(filename) {
+    const i = filename.lastIndexOf(".");
+    return i === -1 ? "" : filename.slice(i + 1).toLowerCase();
+  }
+  function memEmpty(text) {
+    const el = document.createElement("div");
+    el.className = "app-mem-empty";
+    el.textContent = text;
+    return el;
+  }
+  function memLog(text, cls) {
+    els.memLog.hidden = false;
+    const el = document.createElement("div");
+    el.className = "app-line" + (cls ? ` app-line--${cls}` : "");
+    el.textContent = text;
+    els.memLog.appendChild(el);
+  }
+
+  async function renderMemoriesDrawer() {
+    const id = state.companion.companion.id;
+    const name = state.companion.companion.name || "them";
+    els.memoriesTitle.textContent = `$ mvp memories ${name.toLowerCase()}`;
+    els.memConfirmName.textContent = state.companion.companion.name || "";
+    els.memConfirmInput.value = "";
+    els.memDeleteBtn.disabled = true;
+    els.memLog.hidden = true;
+    els.memLog.textContent = "";
+    try {
+      const res = await api(`/api/companions/${id}/memories`);
+      state.memories = res.memories;
+    } catch (err) {
+      memLog(`✗ couldn't load memories: ${err.message}`, "warn");
+      return;
+    }
+    renderMemPhotos();
+    renderMemFacts();
+    renderMemStories();
+    renderMemTranscripts();
+    renderMemTimeline();
+  }
+
+  function renderMemPhotos() {
+    const id = state.companion.companion.id;
+    const wrap = els.memPhotos;
+    wrap.textContent = "";
+    const photos = state.memories.photos;
+    if (photos.length === 0) {
+      wrap.appendChild(memEmpty("no photos yet — drop some in and they'll show up here."));
+      return;
+    }
+    for (const p of photos) {
+      const tile = document.createElement("div");
+      tile.className = "app-mem-photo";
+      if (IMG_RENDERABLE_EXT.has(extOf(p.filename))) {
+        const img = document.createElement("img");
+        img.src = `/api/companions/${id}/artifacts/${p.id}/file`;
+        img.alt = p.caption || p.filename;
+        img.title = p.caption || p.filename;
+        img.loading = "lazy";
+        tile.appendChild(img);
+      } else {
+        const stub = document.createElement("div");
+        stub.className = "app-mem-photo__stub";
+        stub.textContent = `${p.filename} — stored — no browser preview`;
+        tile.appendChild(stub);
+      }
+      if (p.caption) {
+        const cap = document.createElement("div");
+        cap.className = "app-mem-photo__caption";
+        cap.textContent = p.caption;
+        tile.appendChild(cap);
+      }
+      const forget = document.createElement("button");
+      forget.type = "button";
+      forget.className = "app-mem-forget";
+      forget.textContent = "forget";
+      forget.addEventListener("click", () => forgetArtifact(p.id, p.filename));
+      tile.appendChild(forget);
+      wrap.appendChild(tile);
+    }
+  }
+
+  function renderMemFacts() {
+    const list = els.memFacts;
+    list.textContent = "";
+    const facts = state.memories.facts;
+    if (facts.length === 0) {
+      list.appendChild(memEmpty("no facts yet — say something in chat and it lands here."));
+      return;
+    }
+    for (const f of facts) {
+      const li = document.createElement("li");
+      li.className = "app-mem-fact";
+      const text = document.createElement("span");
+      text.textContent = f.text;
+      const forget = document.createElement("button");
+      forget.type = "button";
+      forget.className = "app-mem-forget";
+      forget.textContent = "forget";
+      forget.addEventListener("click", () => forgetFact(f.id));
+      li.appendChild(text);
+      li.appendChild(forget);
+      list.appendChild(li);
+    }
+  }
+
+  function renderMemStories() {
+    const list = els.memStories;
+    list.textContent = "";
+    const stories = state.memories.stories;
+    if (stories.length === 0) {
+      list.appendChild(memEmpty("no stories yet — these come out of the interview, one memory at a time."));
+      return;
+    }
+    for (const s of stories) {
+      const li = document.createElement("li");
+      li.className = "app-mem-story";
+      li.textContent = s;
+      list.appendChild(li);
+    }
+  }
+
+  function renderMemTranscripts() {
+    const wrap = els.memTranscripts;
+    wrap.textContent = "";
+    const transcripts = state.memories.transcripts;
+    if (transcripts.length === 0) {
+      wrap.appendChild(memEmpty("no transcripts yet — voice memos, videos, and vet PDFs land here once ingested."));
+      return;
+    }
+    for (const t of transcripts) {
+      const block = document.createElement("div");
+      block.className = "app-mem-transcript";
+      const head = document.createElement("div");
+      head.className = "app-mem-transcript__head";
+      head.textContent = `${t.filename} · ${t.kind}`;
+      const body = document.createElement("div");
+      body.className = "app-mem-transcript__body";
+      body.textContent = t.text;
+      block.appendChild(head);
+      block.appendChild(body);
+      wrap.appendChild(block);
+    }
+  }
+
+  function renderMemTimeline() {
+    const wrap = els.memTimeline;
+    wrap.textContent = "";
+    const tl = state.memories.timeline;
+    const dated = [];
+    const undated = [];
+    // never invent a date: dob/passing only appear if the profile actually has them
+    if (tl.date_of_birth) dated.push({ date: tl.date_of_birth, label: "born" });
+    for (const a of tl.artifacts) {
+      if (a.captured_at) dated.push({ date: a.captured_at, label: `${a.filename} (${a.kind})` });
+      else undated.push(a);
+    }
+    if (tl.passing_date) dated.push({ date: tl.passing_date, label: "passing" });
+    dated.sort((x, y) => x.date.localeCompare(y.date));
+
+    if (dated.length === 0 && undated.length === 0) {
+      wrap.appendChild(memEmpty("no timeline yet — dates show up as photos and records come in."));
+      return;
+    }
+    if (dated.length > 0) {
+      const strip = document.createElement("div");
+      strip.className = "app-mem-timeline__strip";
+      for (const e of dated) {
+        const item = document.createElement("div");
+        item.className = "app-mem-timeline__item";
+        const date = document.createElement("div");
+        date.className = "app-mem-timeline__date";
+        date.textContent = e.date;
+        const label = document.createElement("div");
+        label.className = "app-mem-timeline__label";
+        label.textContent = e.label;
+        item.appendChild(date);
+        item.appendChild(label);
+        strip.appendChild(item);
+      }
+      wrap.appendChild(strip);
+    }
+    if (undated.length > 0) {
+      const bucket = document.createElement("div");
+      bucket.className = "app-mem-timeline__undated";
+      const head = document.createElement("div");
+      head.className = "app-mem-timeline__undated-head";
+      head.textContent = "undated — kept anyway";
+      bucket.appendChild(head);
+      for (const a of undated) {
+        const row = document.createElement("div");
+        row.className = "app-mem-timeline__undated-item";
+        row.textContent = `${a.filename} (${a.kind})`;
+        bucket.appendChild(row);
+      }
+      wrap.appendChild(bucket);
+    }
+  }
+
+  async function forgetFact(id) {
+    if (!confirm("Forget this for good? It will not come back.")) return;
+    try {
+      await api(`/api/companions/${state.companion.companion.id}/facts/${id}`, { method: "DELETE" });
+      await renderMemoriesDrawer();
+    } catch (err) {
+      memLog(`✗ couldn't forget that: ${err.message}`, "warn");
+    }
+  }
+
+  async function forgetArtifact(id, filename) {
+    if (!confirm(`Forget "${filename}" for good? It will not come back.`)) return;
+    try {
+      await api(`/api/companions/${state.companion.companion.id}/artifacts/${id}`, { method: "DELETE" });
+      await renderMemoriesDrawer();
+    } catch (err) {
+      memLog(`✗ couldn't forget that: ${err.message}`, "warn");
+    }
+  }
+
+  els.memExportBtn.addEventListener("click", async () => {
+    const id = state.companion.companion.id;
+    const btn = els.memExportBtn;
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "exporting…";
+    try {
+      const res = await fetch(`/api/companions/${id}/export`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("content-disposition") || "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match ? match[1] : `${(state.companion.companion.name || "companion").toLowerCase()}-memories.zip`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      memLog(`✗ export failed: ${err.message}`, "warn");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  });
+
+  els.memConfirmInput.addEventListener("input", () => {
+    const name = state.companion?.companion.name || "";
+    els.memDeleteBtn.disabled = els.memConfirmInput.value !== name;
+  });
+
+  els.memDeleteBtn.addEventListener("click", async () => {
+    const id = state.companion.companion.id;
+    const name = state.companion.companion.name || "";
+    if (els.memConfirmInput.value !== name) return;
+    els.memDeleteBtn.disabled = true;
+    try {
+      await api(`/api/companions/${id}?confirm=${encodeURIComponent(name)}`, { method: "DELETE" });
+      toggleMemoriesDrawer(false);
+      await refreshCompanions();
+      navigate(null);
+    } catch (err) {
+      memLog(`✗ ${err.message}`, "warn");
+      els.memDeleteBtn.disabled = els.memConfirmInput.value !== name;
     }
   });
 

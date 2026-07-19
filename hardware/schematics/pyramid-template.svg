@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="148mm" viewBox="0 0 210 148" font-family="monospace">
+  <!-- Tier 0 cut template. PRINT AT 100% SCALE (no fit-to-page). Units: mm.
+       Four identical trapezoids joined edge-to-edge; score the three inner
+       joins, cut the outline, fold into a frustum, tape the open seam.
+       Geometry: base 60, top 10, slant height 35.4 -> faces sit at 45°. -->
+  <rect x="0" y="0" width="210" height="148" fill="white"/>
+  <text x="8" y="10" font-size="4.2" fill="#111">minimumviablepet · pyramid template · print at 100% — this bar must measure exactly 60 mm</text>
+  <line x1="8" y1="14" x2="68" y2="14" stroke="#111" stroke-width="0.6"/>
+  <line x1="8" y1="12" x2="8" y2="16" stroke="#111" stroke-width="0.6"/>
+  <line x1="68" y1="12" x2="68" y2="16" stroke="#111" stroke-width="0.6"/>
+
+  <!-- 4 trapezoids in a strip; each: bottom edge 60, top edge 10, height 35.4.
+       Trapezoid k spans x = 10+55k .. 10+55k+60 at bottom (they share slanted edges). -->
+  <g stroke="#111" stroke-width="0.5" fill="none">
+    <!-- outline of the whole strip -->
+    <path d="M 10 120
+             L 35 84.6 L 45 84.6 L 70 120
+             L 95 84.6 L 105 84.6 L 130 120
+             L 155 84.6 L 165 84.6 L 190 120
+             Z" fill="#f4f9ff"/>
+    <!-- fold (score) lines between trapezoids: the shared slant edges -->
+    <g stroke-dasharray="2 1.6" stroke="#2a6bd4">
+      <line x1="70" y1="120" x2="45" y2="84.6"/>
+      <line x1="70" y1="120" x2="95" y2="84.6"/>
+      <line x1="130" y1="120" x2="105" y2="84.6"/>
+      <line x1="130" y1="120" x2="155" y2="84.6"/>
+    </g>
+  </g>
+
+  <g font-size="3.6" fill="#111">
+    <text x="34" y="112">face 1</text>
+    <text x="94" y="112">face 2</text>
+    <text x="154" y="112">face 3</text>
+    <text x="10" y="128">bottom edges: 60 mm each (this edge faces DOWN onto the phone)</text>
+    <text x="10" y="134">top edges: 10 mm · slant height: 35.4 mm → 45° faces when folded</text>
+    <text x="10" y="140">dashed blue = score &amp; fold · solid = cut · tape the two open end edges together as face 4's seam</text>
+  </g>
+  <g font-size="3.6" fill="#2a6bd4">
+    <text x="72" y="82">← score these, don't cut →</text>
+  </g>
+
+  <!-- dimension callouts -->
+  <g stroke="#c22" stroke-width="0.4" fill="none">
+    <line x1="10" y1="123" x2="70" y2="123"/>
+    <line x1="35" y1="81.6" x2="45" y2="81.6"/>
+  </g>
+  <g font-size="3.4" fill="#c22">
+    <text x="36" y="122">60</text>
+    <text x="38" y="80">10</text>
+  </g>
+
+  <text x="8" y="24" font-size="3.6" fill="#555">phone build: place folded frustum SMALL OPENING DOWN, centered on /emanate/ in 4-up mode.</text>
+  <text x="8" y="29" font-size="3.6" fill="#555">tablet build: print at 200% (bar = 120 mm), same fold order.</text>
+</svg>

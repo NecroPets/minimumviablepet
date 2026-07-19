@@ -1,15 +1,16 @@
 import { embedTexts, vecToBlob } from "../../embeddings.ts";
-import { chunkText, sha256Hex } from "../../text.ts";
+import { chunkText, collapseWhitespace, sha256Hex } from "../../text.ts";
 import { config } from "../../config.ts";
-import { parseProfile } from "../../profile.ts";
+import { updateProfile } from "../../profile.ts";
 import type { Processor } from "../queue.ts";
+import { artifactStillExists } from "../store.ts";
 
 /** Stories and plain text: chunk, embed, and — for short pieces — keep the
  * owner's exact words in profile.stories too. */
 export const processText: Processor = async (ctx) => {
   const { db, artifact } = ctx;
   const raw = await Bun.file(artifact.stored_path).text();
-  const collapsed = raw.replace(/\s+/g, " ").trim();
+  const collapsed = collapseWhitespace(raw);
   if (collapsed === "") {
     return { chunks: 0, detail: "empty text file — nothing to remember" };
   }
@@ -54,17 +55,16 @@ export const processText: Processor = async (ctx) => {
 
   // Short pieces are kept verbatim in the profile document as well (cap 50).
   if (collapsed.length <= 900) {
-    const row = db
-      .query<{ profile_json: string }, [string]>("SELECT profile_json FROM companions WHERE id = ?")
-      .get(artifact.companion_id)!;
-    const profile = parseProfile(row.profile_json);
-    if (profile.stories.length < 50 && !profile.stories.includes(collapsed)) {
-      profile.stories.push(collapsed);
-      db.run(
-        "UPDATE companions SET profile_json = ?, profile_version = profile_version + 1 WHERE id = ?",
-        [JSON.stringify(profile), artifact.companion_id],
-      );
+    // re-check after the embed await: a forget that landed mid-embedding
+    // must not resurrect as a story on the profile
+    if (!artifactStillExists(db, artifact.id)) {
+      throw new Error(`${artifact.original_name} was forgotten mid-processing — leaving no trace`);
     }
+    updateProfile(db, artifact.companion_id, (profile) => {
+      if (profile.stories.length >= 50 || profile.stories.includes(collapsed)) return false;
+      profile.stories.push(collapsed);
+      return true;
+    });
   }
 
   return { chunks: pieces.length, detail: title ?? `${collapsed.length} chars` };

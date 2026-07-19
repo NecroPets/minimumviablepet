@@ -56,12 +56,23 @@ export async function storeArtifactChunks(
   return items.length;
 }
 
-/** Merge a patch into artifacts.meta_json. */
+/** True while the artifact row still exists. Processors must call this in
+ * the same synchronous block as any profile-level write (no await between
+ * check and UPDATE — deletes run on this same thread, so that gap is
+ * race-free). Without it, a "forget" that lands during a model/embed await
+ * would be silently undone by the processor writing captions, stories, or
+ * vet facts derived from the deleted artifact. */
+export function artifactStillExists(db: Database, artifactId: string): boolean {
+  return db.query<{ x: number }, [string]>("SELECT 1 x FROM artifacts WHERE id = ?").get(artifactId) !== null;
+}
+
+/** Merge a patch into artifacts.meta_json. Throws loudly if the artifact was
+ * forgotten mid-processing — the queue catches it and moves on, and nothing
+ * later in the processor can ghost-write for a deleted artifact. */
 export function patchArtifactMeta(db: Database, artifact: ArtifactRow, patch: Record<string, unknown>): void {
-  const current = JSON.parse(
-    db.query<{ meta_json: string }, [string]>("SELECT meta_json FROM artifacts WHERE id = ?").get(artifact.id)!
-      .meta_json,
-  ) as Record<string, unknown>;
+  const row = db.query<{ meta_json: string }, [string]>("SELECT meta_json FROM artifacts WHERE id = ?").get(artifact.id);
+  if (!row) throw new Error(`${artifact.original_name} was forgotten mid-processing — leaving no trace`);
+  const current = JSON.parse(row.meta_json) as Record<string, unknown>;
   db.run("UPDATE artifacts SET meta_json = ? WHERE id = ?", [JSON.stringify({ ...current, ...patch }), artifact.id]);
 }
 

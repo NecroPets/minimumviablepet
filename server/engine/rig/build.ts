@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { config } from "../config.ts";
 import { parseProfile } from "../profile.ts";
 import { buildDescriptor, type RigDescriptor } from "./descriptor.ts";
+import { generateDepth } from "./depth.ts";
 import { maskToCutout, maskerAvailable } from "./masker.ts";
 import { detectAnchors } from "./pose.ts";
 
@@ -130,7 +131,18 @@ export async function buildRig(
   // rig: detectAnchors already returns {} (never throws) when the pose
   // toolchain is unavailable or Vision finds no animal.
   const anchors = await detectAnchors(cutoutPath);
-  const descriptor = buildDescriptor(companion.id, { w: best.w, h: best.h }, parseProfile(companion.profile_json), anchors);
+  // Phase 2 parallax (docs/EMANATION-ENGINE-PLAN.md §4.3) is likewise
+  // non-fatal: generateDepth returns false (never throws) when python3 or
+  // the transformers/torch/pillow install is unavailable, leaving this
+  // companion on the Phase 1 warp-only rig.
+  const hasDepth = await generateDepth(cutoutPath, join(rigDir, "depth.png"));
+  const descriptor = buildDescriptor(
+    companion.id,
+    { w: best.w, h: best.h },
+    parseProfile(companion.profile_json),
+    anchors,
+    hasDepth,
+  );
   db.run("UPDATE companions SET rig_json = ? WHERE id = ?", [JSON.stringify(descriptor), companion.id]);
   return descriptor;
 }

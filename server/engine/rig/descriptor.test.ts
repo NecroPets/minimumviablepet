@@ -51,4 +51,19 @@ describe("buildDescriptor", () => {
     const descriptor = buildDescriptor("cid-anchors", { w: 100, h: 200 }, emptyProfile(), anchors);
     expect(descriptor.anchors).toEqual(anchors);
   });
+
+  test("depth_url is absent when hasDepth is not passed", () => {
+    const descriptor = buildDescriptor("cid-nodepth", { w: 100, h: 200 }, emptyProfile());
+    expect("depth_url" in descriptor).toBe(false);
+  });
+
+  test("depth_url is absent when hasDepth is false", () => {
+    const descriptor = buildDescriptor("cid-nodepth2", { w: 100, h: 200 }, emptyProfile(), {}, false);
+    expect("depth_url" in descriptor).toBe(false);
+  });
+
+  test("depth_url is present and companion-scoped when hasDepth is true", () => {
+    const descriptor = buildDescriptor("cid-depth", { w: 100, h: 200 }, emptyProfile(), {}, true);
+    expect(descriptor.depth_url).toBe("/api/companions/cid-depth/rig/depth");
+  });
 });

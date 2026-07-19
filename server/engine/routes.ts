@@ -573,6 +573,13 @@ export function createEngineRoutes(): EngineRouter {
     return join(config.dataDir, "companions", companionId, "rig", "cutout.png");
   }
 
+  /** Same deterministic-path contract as rigCutoutPath, for the Phase 2
+   * depth map (docs/EMANATION-ENGINE-PLAN.md §4.3) — absent whenever depth
+   * generation wasn't available at build time. */
+  function rigDepthPath(companionId: string): string {
+    return join(config.dataDir, "companions", companionId, "rig", "depth.png");
+  }
+
   async function handleRigBuild(row: CompanionRow, sourceArtifactId: string | null): Promise<Response> {
     let rig: RigDescriptor;
     try {
@@ -593,6 +600,14 @@ export function createEngineRoutes(): EngineRouter {
     const file = Bun.file(rigCutoutPath(row.id));
     if (!(await file.exists())) {
       return json(404, { ok: false, error: "cutout_missing" });
+    }
+    return new Response(file, { headers: { "Content-Type": "image/png" } });
+  }
+
+  async function handleRigDepth(row: CompanionRow): Promise<Response> {
+    const file = Bun.file(rigDepthPath(row.id));
+    if (!(await file.exists())) {
+      return json(404, { ok: false, error: "depth_missing" });
     }
     return new Response(file, { headers: { "Content-Type": "image/png" } });
   }
@@ -759,6 +774,12 @@ export function createEngineRoutes(): EngineRouter {
             return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "GET" });
           }
           return handleRigCutout(row);
+        }
+        if (rest === "/rig/depth") {
+          if (req.method !== "GET") {
+            return json(405, { ok: false, error: "method_not_allowed" }, { Allow: "GET" });
+          }
+          return handleRigDepth(row);
         }
       }
 

@@ -239,8 +239,17 @@ without making the *baseline* depend on hardware most owners don't have.
   eyes on their own pet.
 - **P3 — the motion foundry: real blink + gaze grid.** LivePortrait offline
   generates the real blink and the gaze grid; the WebGL engine blends them.
-  This is the "that's him" moment. *Graduates when* the owner's own reaction
-  says so.
+  This is the "that's him" moment. **Spike result (load-bearing risk, now
+  settled): LivePortrait-animals CANNOT run on Apple Silicon** — its X-Pose
+  op (`MultiScaleDeformableAttention`) is a CUDA kernel with no macOS build.
+  Confirmed, architectural. **Decision: GPU-bake** (the plan's own fallback) —
+  generation runs once on a Linux/NVIDIA box or a one-time cloud GPU; assets
+  serve 100% locally on the Mac after. The complete, ready-to-run recipe +
+  the bundle/manifest contract is **docs/FOUNDRY-RUNBOOK.md**. The runtime
+  performance engine (clip playback + gaze blend + director) is built and
+  verified on the Mac **once a real baked bundle exists** — same
+  live-verification bar as P2, never on unverified neural output. *Graduates
+  when* the owner's own reaction to real baked assets says so.
 - **P4 — full performance: expressions, idle behaviors, settle, speaking
   visemes, the director in full.** The alive-when-you're-not-looking layer.
 - **P5 — optional real-time tier (NVIDIA)** and **optional short-video capture**

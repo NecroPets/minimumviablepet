@@ -569,8 +569,11 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
      vertical breathing scale anchored at the bottom (paws stay planted) —
      driven by the persona and the real chat state machine below. No mesh,
      no bones, no library: an honest slice warp, per docs/EMBODIMENT-PLAN.md
-     §6. Real blink and independent ear-swivel need eye/ear anchors this
-     whole-cutout warp doesn't have — that's Phase 2, not faked here. */
+     §6. Phase 2: when the rig has real eye anchors (Vision keypoints in
+     descriptor.anchors), the cat blinks — a continuous squeeze of the eye
+     band toward the eye line, never a faked overlay; a rig without eye
+     anchors simply never blinks. Independent per-ear rotation is a further
+     step. */
   const RIG_SLICES = 72;
   const RIG_BREATH_AMP = 0.02;                  // ~2% vertical scale at rest
   const RIG_BREATH_RATE = (2 * Math.PI) / 4.2;  // rad/s at energy_scalar 0.5
@@ -582,6 +585,10 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
   const RIG_TOKEN_KICK = 0.018;
   const RIG_TOKEN_DECAY_TAU = 0.5;
   const RIG_REACTION_DURATION = { head_tilt: 900, ear_perk: 650, lean: 1100 };
+  // Phase 2 blink: a brief eye-lid close at the REAL eye anchors (Vision
+  // keypoints). A continuous vertical squeeze toward the eye line — gap-free
+  // by construction, so it can't tear like a block transform.
+  const RIG_BLINK_MS = 190;          // one close+open
   const RIG_STATE_PARAMS = {
     idle:         { breathAmpMul: 1.00, breathRateMul: 1.00, breathBaseline: 1.000, driftMul: 1.00, lookGainMul: 1.00 },
     listening:    { breathAmpMul: 0.85, breathRateMul: 1.10, breathBaseline: 1.000, driftMul: 0.30, lookGainMul: 1.20 },
@@ -597,11 +604,25 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     state: "idle", pendingSettle: false, reactions: [],
     cur: { ...RIG_STATE_PARAMS.idle },
     easedSway: 0, tokenPulse: 0, pointerNorm: 0, nextFidgetAt: 0,
+    blinkStart: -1, nextBlinkAt: 0,
     startTs: 0, lastTs: 0, raf: 0, easeTimer: null, pointerHandler: null,
   };
 
   function rigEnergy() {
     return rig.descriptor?.persona?.energy_scalar ?? 0.5;
+  }
+
+  /** The eye line (normalized y, top-left) from the Vision anchors, or null
+   * when this rig has no eye keypoints — then it simply never blinks, honestly
+   * (no faked blink without real eyes). */
+  function rigEyeLine() {
+    const a = rig.descriptor?.anchors;
+    if (!a || !a.eye_l || !a.eye_r) return null;
+    return (a.eye_l.y + a.eye_r.y) / 2;
+  }
+
+  function rigBlink() {
+    if (rigEyeLine() !== null) rig.blinkStart = performance.now();
   }
 
   function rigFireReaction(type, ampMul) {
@@ -627,9 +648,11 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     if (rig.easeTimer) { clearTimeout(rig.easeTimer); rig.easeTimer = null; }
     if (next === "listening") {
       rigFireReaction("ear_perk", 0.8);
+      rigBlink();
     } else if (next === "acknowledged") {
       const pool = rig.descriptor.persona.reactions || [];
       if (pool.length) rigFireReaction(pool[Math.floor(Math.random() * pool.length)], 1);
+      rigBlink();
       rig.easeTimer = setTimeout(() => {
         rig.easeTimer = null;
         rigSetState(rig.pendingSettle ? "settling" : "idle");
@@ -687,7 +710,49 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     return t * t * (3 - 2 * t);
   }
 
-  function rigDraw(breath, swayCurrent, activeReactions) {
+  // The x-offset the slice warp applies at a given normalized row — so the
+  // blink eyelids can be drawn at the same warped position as the body.
+  function rigWarpX(rowNorm, swayCurrent, bounds) {
+    const headW = 1 - rigSmoothstep(0.30, 0.52, rowNorm);
+    return swayCurrent * (1 - rowNorm) * bounds.w + swayCurrent * RIG_HEAD_EXTRA_SWAY * bounds.w * headW;
+  }
+  // The breath-scaled dest y (bottom-anchored) for a normalized row.
+  function rigWarpY(yNorm, breath, bounds) {
+    return bounds.h - (bounds.h - yNorm * bounds.h) * breath;
+  }
+
+  // A real blink: the brow skin just above each eye is drawn descending over
+  // the eye by `blinkEnv` — an actual eyelid, not a squint (a squeeze toward
+  // the eye line leaves the eye visible). Drawn at the warped eye position so
+  // it tracks the body; only ever runs when the rig has real eye anchors, so
+  // no eye is ever faked shut. A soft-alpha bottom edge hides the lid margin.
+  function rigDrawEyelid(ctx, img, eye, breath, swayCurrent, blinkEnv, bounds, srcW, srcH) {
+    const hw = 0.085, hh = 0.05, brow = 0.06;          // normalized eye box + brow strip
+    const sx = (eye.x - hw) * srcW, sw = 2 * hw * srcW;
+    const sBrowTop = Math.max(0, eye.y - hh - brow) * srcH, sBrowH = brow * srcH;
+    const dxOff = rigWarpX(eye.y, swayCurrent, bounds);
+    const dEyeTop = rigWarpY(eye.y - hh, breath, bounds);
+    const dEyeBot = rigWarpY(eye.y + hh, breath, bounds);
+    const coverH = (dEyeBot - dEyeTop) * blinkEnv;      // how far the lid has closed
+    if (coverH < 0.5) return;
+    const dx = (eye.x - hw) * bounds.w + dxOff, dw = 2 * hw * bounds.w;
+    // draw the brow skin descending over the eye, in a few horizontal bands
+    // whose alpha tapers at the closing edge so the lid margin isn't a hard
+    // line (no compositing tricks that could punch through to the background)
+    const bands = 5;
+    for (let k = 0; k < bands; k++) {
+      const f0 = k / bands, f1 = (k + 1) / bands;
+      const a = f1 < 0.7 ? 1 : rigClamp(1 - (f1 - 0.7) / 0.3, 0.12, 1);
+      ctx.globalAlpha = a;
+      ctx.drawImage(
+        img, sx, sBrowTop + sBrowH * f0, sw, sBrowH * (f1 - f0),
+        dx, dEyeTop + coverH * f0, dw, coverH * (f1 - f0),
+      );
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function rigDraw(breath, swayCurrent, activeReactions, eyeLine, blinkEnv) {
     const { bounds } = rig.descriptor;
     const ctx = rig.ctx;
     ctx.setTransform(rig.dpr, 0, 0, rig.dpr, 0, 0);
@@ -710,7 +775,7 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
       const earW = 1 - rigSmoothstep(0.02, 0.28, rowCenter);
       let offsetX = swayCurrent * (1 - rowCenter) * bounds.w;        // ramps 0 bottom -> full top
       offsetX += swayCurrent * RIG_HEAD_EXTRA_SWAY * bounds.w * headW; // extra look, feathered over the head
-      let destYTop = bounds.h - (bounds.h - y0) * breath;           // anchored at the bottom
+      let destYTop = bounds.h - (bounds.h - y0) * breath; // anchored at the bottom
       let destYBot = bounds.h - (bounds.h - y1) * breath;
       for (const r of activeReactions) {
         if (r.type === "lean") {
@@ -727,6 +792,13 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
         }
       }
       ctx.drawImage(img, 0, i * srcSliceH, srcW, srcSliceH, offsetX, destYTop, bounds.w, destYBot - destYTop + overlap);
+    }
+    // blink: real eyelids over the warped body, only with real eye anchors
+    if (eyeLine !== null && blinkEnv > 0) {
+      const a = rig.descriptor.anchors;
+      for (const eye of [a.eye_l, a.eye_r]) {
+        if (eye) rigDrawEyelid(ctx, img, eye, breath, swayCurrent, blinkEnv, bounds, srcW, srcH);
+      }
     }
   }
 
@@ -750,6 +822,14 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
       rig.nextFidgetAt = ts + fMin + Math.random() * (fMax - fMin);
     }
 
+    // natural idle blinks (only when we have real eye anchors), a touch more
+    // often at higher energy — cats blink slowly and irregularly
+    if (rigEyeLine() !== null && ts >= rig.nextBlinkAt) {
+      if (rig.nextBlinkAt > 0) rigBlink();
+      const bMin = 5200 - 2200 * energy, bMax = 9000 - 3500 * energy;
+      rig.nextBlinkAt = ts + bMin + Math.random() * (bMax - bMin);
+    }
+
     // breath: subtle periodic vertical scale, anchored at the bottom, rate scaled by energy
     const breathAmp = RIG_BREATH_AMP * rig.cur.breathAmpMul;
     const breathRate = RIG_BREATH_RATE * (0.7 + 0.6 * energy) * rig.cur.breathRateMul;
@@ -771,7 +851,15 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
     }
     rig.reactions = active;
 
-    rigDraw(breath, swayCurrent, active);
+    // blink envelope: sin hump over RIG_BLINK_MS, 0 when no blink is running
+    let blinkEnv = 0;
+    if (rig.blinkStart >= 0) {
+      const frac = (performance.now() - rig.blinkStart) / RIG_BLINK_MS;
+      if (frac >= 1) rig.blinkStart = -1;
+      else blinkEnv = Math.sin(Math.PI * frac);
+    }
+
+    rigDraw(breath, swayCurrent, active, rigEyeLine(), blinkEnv);
     rig.raf = requestAnimationFrame(rigTick);
   }
 
@@ -847,6 +935,9 @@ a { color: var(--mvp-green-dark); text-decoration: none; }
   window.__mvpRigTestHook = {
     setState: (s) => rigSetState(s),
     getState: () => rig.state,
+    fireReaction: (t, a) => rigFireReaction(t, a),
+    blink: () => rigBlink(),
+    hasEyes: () => rigEyeLine() !== null,
   };
 
   /* ---------- status pill / engine poller ---------- */

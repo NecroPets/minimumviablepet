@@ -29,6 +29,18 @@ SAMPLE_CUTOUT = Path(
     "/private/tmp/claude-501/-Users-futjr-defai-defai/1144f77a-5722-4f5b-ae39-dbfd2d1354bb"
     "/scratchpad/rig-contract/sample-cutout.png"
 )
+# P2 (depth parallax) sample pair — same 365x780 front-facing Oni cutout
+# (byte-identical to SAMPLE_CUTOUT above) plus its matching depth map
+# (grayscale, near=bright/far=dark, background=0), generated per
+# docs/EMANATION-ENGINE-PLAN.md §4.3's Depth Anything V2 spike.
+SAMPLE_DEPTH_CUTOUT = Path(
+    "/private/tmp/claude-501/-Users-futjr-defai-defai/1144f77a-5722-4f5b-ae39-dbfd2d1354bb"
+    "/scratchpad/p2-contract/sample-cutout.png"
+)
+SAMPLE_DEPTH = Path(
+    "/private/tmp/claude-501/-Users-futjr-defai-defai/1144f77a-5722-4f5b-ae39-dbfd2d1354bb"
+    "/scratchpad/p2-contract/sample-depth.png"
+)
 BOUNDS = {"w": 365, "h": 780}
 
 
@@ -103,6 +115,32 @@ def seed_rig(server, cid, anchors=True):
     con.close()
 
 
+def seed_rig_with_depth(server, cid):
+    """Seed a rig exactly like seed_rig(), plus a depth map + depth_url — the
+    P2 (docs/EMANATION-ENGINE-PLAN.md §4.3) contract the WebGL parallax
+    renderer depends on. Same no-interception philosophy as seed_rig(): the
+    depth PNG goes on disk at the exact deterministic path
+    (companions/:id/rig/depth.png) the real GET .../rig/depth route serves
+    from, so the browser's request hits the real, unmodified server. Returns
+    the seeded depth PNG path (unused by the test now that the real route is
+    in place; kept for callers that want to inspect the seeded bytes)."""
+    rig_dir = server.mvp_data_dir / "companions" / cid / "rig"
+    rig_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(SAMPLE_DEPTH_CUTOUT, rig_dir / "cutout.png")
+    depth_path = rig_dir / "depth.png"
+    shutil.copyfile(SAMPLE_DEPTH, depth_path)
+
+    descriptor = rig_descriptor(cid, anchors=True)
+    descriptor["depth_url"] = f"/api/companions/{cid}/rig/depth"
+
+    con = sqlite3.connect(server.mvp_db_path)
+    con.execute(
+        "UPDATE companions SET rig_json = ? WHERE id = ?",
+        (json.dumps(descriptor), cid),
+    )
+    con.commit()
+    con.close()
+    return depth_path
 
 
 def canvas_data_url(page):
@@ -128,6 +166,50 @@ def canvas_row_centroid_x(page, row_frac):
             return sumA > 0 ? sumX / sumA : null;
         }""",
         row_frac,
+    )
+
+
+def canvas_row_centroid_x_any_mode(page, row_frac):
+    """Same alpha-weighted centroid as canvas_row_centroid_x, but copies the
+    rig canvas onto a throwaway 2D canvas first via drawImage — works whether
+    #app-rig-canvas itself is 2D- or WebGL-backed (a WebGL-backed canvas has
+    no 2D context of its own to read pixels from directly; a <canvas> can
+    only ever host one context type for its lifetime)."""
+    return page.evaluate(
+        """(rowFrac) => {
+            const src = document.getElementById('app-rig-canvas');
+            const tmp = document.createElement('canvas');
+            tmp.width = src.width; tmp.height = src.height;
+            const ctx = tmp.getContext('2d');
+            ctx.drawImage(src, 0, 0);
+            const w = tmp.width, h = tmp.height;
+            const rowY = Math.min(h - 1, Math.floor(h * rowFrac));
+            const data = ctx.getImageData(0, rowY, w, 1).data;
+            let sumX = 0, sumA = 0;
+            for (let x = 0; x < w; x++) {
+                const a = data[x * 4 + 3];
+                if (a > 20) { sumX += x * a; sumA += a; }
+            }
+            return sumA > 0 ? sumX / sumA : null;
+        }""",
+        row_frac,
+    )
+
+
+def canvas_corner_alpha(page):
+    """Alpha of the canvas's top-left corner pixel — mode-agnostic (see
+    canvas_row_centroid_x_any_mode). The cutout's background is transparent
+    there in both the slice-warp (drawn straight from the alpha-cut PNG) and
+    the GL parallax renderer (fragment shader discards/zeroes it)."""
+    return page.evaluate(
+        """() => {
+            const src = document.getElementById('app-rig-canvas');
+            const tmp = document.createElement('canvas');
+            tmp.width = src.width; tmp.height = src.height;
+            const ctx = tmp.getContext('2d');
+            ctx.drawImage(src, 0, 0);
+            return ctx.getImageData(0, 0, 1, 1).data[3];
+        }"""
     )
 
 
@@ -232,3 +314,77 @@ def test_rig_teardown_on_route_away(server, page_factory):
     page.evaluate("(id) => { location.hash = '#/c/' + id; }", other_cid)
     wait_view(page, "interview")
     assert page.locator("#app-rig").is_hidden()
+
+
+def test_rig_parallax_with_depth(server, page_factory):
+    """P2 (docs/EMANATION-ENGINE-PLAN.md §4.3/§4.4): a rig descriptor
+    carrying depth_url gets real WebGL depth parallax instead of the flat
+    slice-warp, chosen in loadRig() when a canvas WebGL context (with vertex
+    texture fetch — depth is sampled in the vertex shader) is actually
+    available; otherwise it falls back to the same honest slice-warp the
+    no-depth tests above already cover. Playwright's headless Chromium runs
+    on SwiftShader (software GL) — this asserts whichever path really
+    initialized rather than assuming one, and treats BOTH as a pass: (a) the
+    canvas animates and (c) responds to the pointer either way (the slice-
+    warp already proves that; GL mode proves the same behavior through the
+    new renderer), and (b) the transparent background stays transparent
+    regardless of which renderer drew it.
+    """
+    cid = create_companion(server, name="Oni")
+    seed_awake_chat(server, cid)
+    seed_rig_with_depth(server, cid)
+
+    page = page_factory()
+    page.goto(app_url(server), wait_until="load", timeout=30000)
+    wait_view(page, "awake")
+    page.wait_for_selector("#app-rig:not([hidden])", timeout=10000)
+    assert page.locator("#app-rig").is_visible()
+
+    mode = page.evaluate("() => window.__mvpRigTestHook.getMode()")
+    assert mode in ("gl", "2d"), f"unexpected rig render mode: {mode!r}"
+    print(f"\n[test_rig_parallax_with_depth] renderer actually used: {mode!r}")
+
+    # honest label unchanged regardless of renderer
+    label = page.locator("#app-rig-label").inner_text()
+    assert "rigged" in label
+    assert "not them" in label
+
+    # (a) frame-diff over time proves the loop is actually running (shared
+    # rAF loop — canvas_data_url works for both 2D- and WebGL-backed canvases
+    # since preserveDrawingBuffer:true keeps the GL buffer readable)
+    frame0 = canvas_data_url(page)
+    page.wait_for_timeout(1200)
+    frame1 = canvas_data_url(page)
+    assert frame0 != frame1, "canvas pixels must change between t=0 and t=1.2s"
+
+    # (c) pointer left vs right of the canvas shifts the rendered head row —
+    # true for both renderers, just at different (both tasteful) amplitudes
+    box = page.locator("#app-rig-canvas").bounding_box()
+    cy = box["y"] + box["height"] / 2
+
+    page.mouse.move(box["x"] + box["width"] * 0.1, cy)
+    page.wait_for_timeout(700)
+    left_centroid = canvas_row_centroid_x_any_mode(page, 0.15)
+
+    page.mouse.move(box["x"] + box["width"] * 0.9, cy)
+    page.wait_for_timeout(700)
+    right_centroid = canvas_row_centroid_x_any_mode(page, 0.15)
+
+    assert left_centroid is not None and right_centroid is not None
+    print(f"[test_rig_parallax_with_depth] centroid left={left_centroid} right={right_centroid}")
+    # the GL parallax amplitude is deliberately small (RIG_PARALLAX_MAX ~1.7%
+    # of width) — subtle presence, not the slice-warp's larger look-toward
+    # sway — so the bar is lower than the no-depth cursor test's, but still a
+    # clear, non-noise margin.
+    min_margin = 15 if mode == "2d" else 1.5
+    assert right_centroid - left_centroid > min_margin, (
+        f"pointer right of center should shift the head row right of pointer-left "
+        f"by a clear margin (device px, mode={mode}); got left={left_centroid} right={right_centroid}"
+    )
+
+    # (b) the cutout's alpha-cut background stays transparent no matter which
+    # renderer drew it (slice-warp draws the PNG's own alpha; the GL
+    # fragment shader discards/zeroes background alpha)
+    assert canvas_corner_alpha(page) == 0
+
+    page.screenshot(path=str(SHOTS / "rig_parallax.png"))

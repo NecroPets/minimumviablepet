@@ -227,10 +227,16 @@ without making the *baseline* depend on hardware most owners don't have.
 - **P1 — undo the overreach (immediate, no new deps).** Remove the bad canvas
   blink; keep only gentle breath + look-toward, tuned to feel calm. Ships now
   as the honest baseline. *(This is the fix for what you're seeing today.)*
-- **P2 — depth parallax (real-time, CoreML build asset).** The portrait gains
-  volumetric presence — the biggest perceived-quality jump for the least
-  weight, and it needs no LivePortrait. *Graduates when* it reads as "present,
-  not a flat photo."
+- **P2 — depth parallax.** ✅ **SHIPPED.** Depth Anything V2 (offline, optional
+  python install) generates a per-companion depth map; a vanilla WebGL runtime
+  renders the cutout as a depth-displaced mesh so near parts move more than far
+  as the viewpoint shifts — real volumetric presence, driven by cursor + idle
+  drift + breath through the persona/chat state machine, degrading to the
+  slice-warp with no depth/WebGL. Live-verified on Oni: clear presence, zero
+  silhouette stretching (proof frames in tests/shots/rig_parallax_*). *Shipped
+  with a torch-based depth tool; CoreML/Neural-Engine is the lighter runtime-
+  adjacent swap noted for later.* The remaining "graduation" is the owner's own
+  eyes on their own pet.
 - **P3 — the motion foundry: real blink + gaze grid.** LivePortrait offline
   generates the real blink and the gaze grid; the WebGL engine blends them.
   This is the "that's him" moment. *Graduates when* the owner's own reaction

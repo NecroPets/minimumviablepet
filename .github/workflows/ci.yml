@@ -1,0 +1,38 @@
+# The model-free lane, run for real on every push and PR. This is what the
+# `build` badge reflects — an honest green, not a decoration.
+#
+# It runs the engine unit suite (chunker, retrieval math, persona, queue,
+# TTS/whisper arg-building, export helpers…). Nothing here needs Ollama: the
+# model-dependent tests live in the pytest lane and gate on a live daemon,
+# which is not reproducible in CI, so it stays a local step (see README →
+# Building & testing). espeak-ng is installed so the real-synthesis TTS test
+# actually runs on Linux instead of skipping.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  engine-tests:
+    name: engine unit tests (bun, model-free)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install espeak-ng (exercises the real TTS path)
+        run: sudo apt-get update && sudo apt-get install -y espeak-ng
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: bun test server/engine
+        env:
+          MVP_TTS_BIN: espeak-ng
+        run: bun test server/engine

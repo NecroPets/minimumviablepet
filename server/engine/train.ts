@@ -4,6 +4,7 @@ import { embedTexts, vecToBlob } from "./embeddings.ts";
 import { ollama, type OllamaClient } from "./ollama.ts";
 import { compilePersonaPrompt } from "./persona.ts";
 import { mergeProfile, parseProfile, readiness, type PetProfile, type Readiness, type ReadinessCounts } from "./profile.ts";
+import { buildRig } from "./rig/build.ts";
 import { chunkText, sha256Hex } from "./text.ts";
 
 export interface TrainEmit {
@@ -271,6 +272,17 @@ export async function trainCompanion(
     );
   })();
   const progress = readiness(finalProfile, counts);
+
+  // Rig is optional, like whisper for a given file: no available masker, or
+  // no photo to build from, must never fail an otherwise-successful train.
+  // A genuine failure elsewhere above (consensus/chunks/embedding/compile)
+  // is not caught here and still propagates.
+  try {
+    await buildRig(db, { id: companionId, profile_json: JSON.stringify(finalProfile) });
+    emit("step", { name: "rig" });
+  } catch (err) {
+    emit("step", { name: "rig", skipped: true, reason: (err as Error).message });
+  }
 
   const total = db
     .query<{ n: number }, [string]>("SELECT COUNT(*) n FROM chunks WHERE companion_id = ?")

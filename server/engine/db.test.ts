@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { mkdtempSync } from "node:fs";
@@ -23,7 +24,13 @@ describe("openDb", () => {
     for (const t of ["companions", "artifacts", "chunks", "embedding_cache", "facts", "conversations", "messages"]) {
       expect(tables).toContain(t);
     }
-    expect(db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(1);
+    expect(db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(2);
+  });
+
+  test("fresh DBs get rig_json without needing the migration", () => {
+    const db = tempDb();
+    const cols = db.query<{ name: string }, []>("PRAGMA table_info(companions)").all().map((c) => c.name);
+    expect(cols).toContain("rig_json");
   });
 
   test("re-opening an existing db is idempotent", () => {
@@ -31,7 +38,41 @@ describe("openDb", () => {
     const path = join(dir, "mvp.db");
     openDb(path).close();
     const again = openDb(path);
-    expect(again.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(1);
+    expect(again.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(2);
+  });
+
+  test("migrates a v1 DB (no rig_json) to v2 by adding the column", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mvp-db-"));
+    const path = join(dir, "mvp.db");
+    // simulate a pre-rig DB: the companions table shape from before rig_json,
+    // at user_version 1 (the DDL const is private to db.ts, so the v1 shape
+    // is reproduced directly here)
+    const legacy = new Database(path);
+    legacy.run("PRAGMA journal_mode = WAL");
+    legacy.run(`
+      CREATE TABLE companions (
+        id              TEXT PRIMARY KEY,
+        name            TEXT NOT NULL DEFAULT '',
+        state           TEXT NOT NULL DEFAULT 'interviewing' CHECK (state IN ('interviewing','awake')),
+        profile_json    TEXT NOT NULL DEFAULT '{}',
+        profile_version INTEGER NOT NULL DEFAULT 1,
+        persona_prompt  TEXT,
+        created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        trained_at      TEXT
+      );
+    `);
+    legacy.run("INSERT INTO companions (id, name) VALUES ('c1', 'Kernel')");
+    legacy.run("PRAGMA user_version = 1");
+    legacy.close();
+
+    const migrated = openDb(path);
+    expect(migrated.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(2);
+    const cols = migrated.query<{ name: string }, []>("PRAGMA table_info(companions)").all().map((c) => c.name);
+    expect(cols).toContain("rig_json");
+    // pre-existing row survives the migration untouched, with rig_json null
+    const row = migrated.query<{ name: string; rig_json: string | null }, []>("SELECT name, rig_json FROM companions WHERE id = 'c1'").get()!;
+    expect(row.name).toBe("Kernel");
+    expect(row.rig_json).toBeNull();
   });
 });
 

@@ -240,9 +240,23 @@ discipline):
   3. **Source photo is selectable** (`POST /rig?source=<artifactId>`,
      fulfilling §4.1 "the owner confirms"), with an auto-pick that masks the
      candidate photos and keeps the fullest **portrait** cutout as the default.
-- **Phase 2 — articulated rig.** Head/ears/eyes/tail layers, real blinks and
-  ear flicks, richer reactions. *Graduates when*: articulation improves
-  likeness without breaking on the casual-photo inputs real users have.
+- **Phase 2 — articulated rig.** ✅ **SHIPPED (blink).** Real eye/ear/nose
+  anchors come from macOS Vision's `VNDetectAnimalBodyPoseRequest` (the same
+  native stack as the masker), stored in `descriptor.anchors`. With real eye
+  anchors the cat **blinks** — an actual eyelid (brow fur drawn descending
+  over the eye, feathered), never a squint or a faked overlay; a rig with no
+  eye anchors simply never blinks. Live-verified on Oni (eyes conf 0.92/0.91;
+  open→closed frames saved to tests/shots/rig_eyes_{open,blink}.png).
+  Independent per-ear rotation is the remaining Phase-2 refinement — the ear
+  anchors are already detected and stored, ready to drive it. *Graduation
+  fully closes when*: per-ear articulation lands and it's judged to improve
+  likeness on real users' casual photos.
+
+  **Also in this pass — a Phase 1 bug the owner caught:** the slice-warp tore
+  the top of the head off during reactions, because head/ear influence was
+  applied as HARD region-membership steps (a discontinuity at one slice
+  boundary). Fixed with continuous smoothstep weighting + slice overlap: 0
+  split-rows now, verified.
 - **Phase 3 — optional neural tier.** Whisper-style install for higher
   fidelity. *Graduates when*: a local model runs real-time on capable
   hardware and the degrade-to-vanilla path is clean.

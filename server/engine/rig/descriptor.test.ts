@@ -31,4 +31,24 @@ describe("buildDescriptor", () => {
     expect(descriptor.persona.energy_scalar).toBe(0.55);
     expect(descriptor.persona.reactions).toEqual(["ear_perk", "head_tilt", "lean"]);
   });
+
+  test("anchors key is absent when not passed", () => {
+    const descriptor = buildDescriptor("cid-noanchors", { w: 100, h: 200 }, emptyProfile());
+    expect("anchors" in descriptor).toBe(false);
+  });
+
+  test("anchors key is absent when passed {}", () => {
+    const descriptor = buildDescriptor("cid-emptyanchors", { w: 100, h: 200 }, emptyProfile(), {});
+    expect("anchors" in descriptor).toBe(false);
+  });
+
+  test("anchors is present and correct when passed non-empty", () => {
+    const anchors = {
+      eye_l: { x: 0.7343, y: 0.1803, conf: 0.92 },
+      eye_r: { x: 0.4542, y: 0.1802, conf: 0.91 },
+      nose: { x: 0.5964, y: 0.2572, conf: 0.85 },
+    };
+    const descriptor = buildDescriptor("cid-anchors", { w: 100, h: 200 }, emptyProfile(), anchors);
+    expect(descriptor.anchors).toEqual(anchors);
+  });
 });

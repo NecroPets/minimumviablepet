@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="500" viewBox="0 0 820 500" font-family="monospace">
+  <!-- Tier 3 wiring — ESP32 + two servos + separate servo PSU, common ground. -->
+  <rect width="820" height="500" fill="white"/>
+  <text x="20" y="30" font-size="16" fill="#111">Tier 3 · pan/tilt wiring (logic and servo power are SEPARATE supplies)</text>
+
+  <!-- ESP32 -->
+  <rect x="70" y="120" width="170" height="240" rx="8" fill="#eef" stroke="#2a6bd4" stroke-width="2"/>
+  <text x="104" y="148" font-size="14" fill="#2a6bd4">ESP32 dev board</text>
+  <g font-size="12" fill="#111">
+    <text x="90" y="190">GPIO 18 ○──</text>
+    <text x="90" y="250">GPIO 19 ○──</text>
+    <text x="90" y="310">GND     ○──</text>
+    <text x="90" y="340">USB 5V in (its own brick)</text>
+  </g>
+
+  <!-- servos -->
+  <rect x="520" y="110" width="180" height="90" rx="8" fill="#f7f7f7" stroke="#111" stroke-width="2"/>
+  <text x="548" y="136" font-size="14" fill="#111">PAN servo</text>
+  <g font-size="12">
+    <text x="536" y="160" fill="#e08a00">SIG (orange/white)</text>
+    <text x="536" y="176" fill="#c22">V+  (red)</text>
+    <text x="536" y="192" fill="#555">GND (brown/black)</text>
+  </g>
+
+  <rect x="520" y="240" width="180" height="90" rx="8" fill="#f7f7f7" stroke="#111" stroke-width="2"/>
+  <text x="544" y="266" font-size="14" fill="#111">TILT servo</text>
+  <g font-size="12">
+    <text x="536" y="290" fill="#e08a00">SIG (orange/white)</text>
+    <text x="536" y="306" fill="#c22">V+  (red)</text>
+    <text x="536" y="322" fill="#555">GND (brown/black)</text>
+  </g>
+
+  <!-- PSU -->
+  <rect x="520" y="386" width="180" height="70" rx="8" fill="#fff4f4" stroke="#c22" stroke-width="2"/>
+  <text x="536" y="412" font-size="14" fill="#c22">5–6 V ≥ 4 A PSU</text>
+  <text x="536" y="430" font-size="12" fill="#111">V+ ──── both servo V+</text>
+  <text x="536" y="446" font-size="12" fill="#111">GND ─── common ground bus</text>
+
+  <!-- signal wires -->
+  <line x1="176" y1="186" x2="536" y2="156" stroke="#e08a00" stroke-width="2"/>
+  <line x1="176" y1="246" x2="536" y2="286" stroke="#e08a00" stroke-width="2"/>
+
+  <!-- ground bus -->
+  <line x1="176" y1="306" x2="470" y2="306" stroke="#555" stroke-width="2.5"/>
+  <line x1="470" y1="306" x2="470" y2="442" stroke="#555" stroke-width="2.5"/>
+  <line x1="470" y1="188" x2="470" y2="306" stroke="#555" stroke-width="2.5"/>
+  <line x1="470" y1="188" x2="536" y2="188" stroke="#555" stroke-width="2.5"/>
+  <line x1="470" y1="318" x2="536" y2="318" stroke="#555" stroke-width="2.5"/>
+  <line x1="470" y1="442" x2="536" y2="442" stroke="#555" stroke-width="2.5"/>
+  <circle cx="470" cy="306" r="4" fill="#555"/>
+  <circle cx="470" cy="318" r="4" fill="#555"/>
+  <text x="300" y="298" font-size="13" fill="#555">COMMON GROUND — non-negotiable</text>
+
+  <!-- V+ wires -->
+  <line x1="536" y1="172" x2="500" y2="172" stroke="#c22" stroke-width="2.5"/>
+  <line x1="500" y1="172" x2="500" y2="426" stroke="#c22" stroke-width="2.5"/>
+  <line x1="500" y1="302" x2="536" y2="302" stroke="#c22" stroke-width="2.5"/>
+  <line x1="500" y1="426" x2="536" y2="426" stroke="#c22" stroke-width="2.5"/>
+  <circle cx="500" cy="302" r="4" fill="#c22"/>
+
+  <g font-size="12" fill="#c22">
+    <text x="70" y="404">NEVER power servos from the ESP32's 5 V pin —</text>
+    <text x="70" y="420">stall current browns out the board and the rig</text>
+    <text x="70" y="436">twitches over someone's head. Two bricks, one ground.</text>
+  </g>
+  <text x="70" y="470" font-size="12" fill="#555">signals are 3.3 V logic — fine for standard hobby servos at short wire runs (&lt; 50 cm). Twist SIG with GND for longer runs.</text>
+</svg>
